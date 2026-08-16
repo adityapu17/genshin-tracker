@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Genshin Tracker</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f1424">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="setup-screen" class="screen hidden">
+  <div class="setup-card">
+    <h1>Genshin Tracker</h1>
+    <p class="muted">Hubungkan akun HoyoLab kamu. Cookie disimpan lokal di HP ini saja, tidak dikirim ke server manapun selain HoyoLab.</p>
+
+    <label>Server</label>
+    <select id="setup-server">
+      <option value="os_asia">Asia</option>
+      <option value="os_usa">America</option>
+      <option value="os_euro">Europe</option>
+      <option value="os_cht">TW/HK/MO</option>
+    </select>
+
+    <label>UID Genshin</label>
+    <input id="setup-uid" type="text" inputmode="numeric" placeholder="cth: 800xxxxxx">
+
+    <label>Cookie HoyoLab</label>
+    <textarea id="setup-cookie" rows="5" placeholder="Paste cookie di sini..."></textarea>
+    <button id="btn-howto" class="link-btn" type="button">Cara ambil cookie?</button>
+
+    <button id="btn-connect">Hubungkan</button>
+    <p id="setup-error" class="error hidden"></p>
+  </div>
+
+  <div id="howto-modal" class="modal hidden">
+    <div class="modal-content">
+      <h2>Cara ambil Cookie HoyoLab</h2>
+      <ol>
+        <li>Buka <b>hoyolab.com</b> di browser HP/laptop, login ke akunmu.</li>
+        <li>Buka DevTools (F12) → tab <b>Network</b>. Reload halaman.</li>
+        <li>Klik salah satu request ke <b>bbs-api-os.hoyolab.com</b>.</li>
+        <li>Di bagian Request Headers, cari baris <b>Cookie</b>, copy semua isinya.</li>
+        <li>Paste ke kolom Cookie di app ini.</li>
+      </ol>
+      <p class="muted">Kalau di HP susah buka DevTools, pakai browser laptop dulu buat ambil cookie-nya, lalu paste manual ke app di HP.</p>
+      <button id="btn-close-howto">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<div id="app-screen" class="screen hidden">
+  <header class="topbar">
+    <span id="topbar-title">Genshin Tracker</span>
+    <button id="btn-settings" title="Pengaturan">⚙️</button>
+  </header>
+
+  <main id="main-content">
+    <div id="tab-home" class="tab-panel"></div>
+    <div id="tab-characters" class="tab-panel hidden"></div>
+  </main>
+
+  <nav class="bottom-nav">
+    <button class="nav-btn active" data-tab="home">🏠<span>Home</span></button>
+    <button class="nav-btn" data-tab="characters">🧑‍🤝‍🧑<span>Karakter</span></button>
+  </nav>
+</div>
+
+<div id="char-modal" class="modal hidden">
+  <div class="modal-content" id="char-modal-content"></div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="js/api.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

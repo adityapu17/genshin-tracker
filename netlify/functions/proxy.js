@@ -6,13 +6,19 @@ const BASE_RECORD = 'https://bbs-api-os.hoyolab.com/game_record/genshin/api';
 const BASE_SIGN = 'https://sg-hk4e-api.hoyolab.com/event/sol';
 const ACT_ID = 'e202102251931481'; // act_id daily check-in Genshin (Global/OS), stabil dari 2021
 
-const COMMON_HEADERS = {
-  'x-rpc-app_version': '2.71.1',
-  'x-rpc-client_type': '5',
-  'x-rpc-language': 'id-id',
-  'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/120 Mobile Safari/537.36 miHoYoBBS/2.71.1',
-  'Content-Type': 'application/json',
-};
+function buildHeaders() {
+  return {
+    'x-rpc-app_version': '2.71.1',
+    'x-rpc-client_type': '5',
+    'x-rpc-language': 'id-id',
+    'x-rpc-device_id': crypto.randomUUID(),
+    'x-rpc-platform': 'ios',
+    'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/120 Mobile Safari/537.36 miHoYoBBS/2.71.1',
+    'Content-Type': 'application/json',
+    'Origin': 'https://act.hoyolab.com',
+    'Referer': 'https://act.hoyolab.com/',
+  };
+}
 
 exports.handler = async (event) => {
   const cors = {
@@ -30,7 +36,7 @@ exports.handler = async (event) => {
 
     const params = event.queryStringParameters || {};
     const action = params.action;
-    const headers = { ...COMMON_HEADERS, Cookie: cookie };
+    const headers = { ...buildHeaders(), Cookie: cookie };
 
     let url, method = 'GET', body;
 
@@ -69,7 +75,18 @@ exports.handler = async (event) => {
     }
 
     const resp = await fetch(url, { method, headers, body });
-    const data = await resp.json();
+    const raw = await resp.text();
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      // HoyoLab/WAF balikin non-JSON (biasanya kena block bot-protection) — kirim balik apa adanya biar kelihatan di app
+      return {
+        statusCode: 200,
+        headers: { ...cors, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: `HoyoLab menolak request (status ${resp.status}): ${raw.slice(0, 200)}` }),
+      };
+    }
     return { statusCode: 200, headers: { ...cors, 'Content-Type': 'application/json' }, body: JSON.stringify(data) };
   } catch (err) {
     return { statusCode: 500, headers: cors, body: JSON.stringify({ error: String(err) }) };

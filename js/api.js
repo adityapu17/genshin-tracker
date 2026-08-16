@@ -8,9 +8,11 @@ const Storage = {
   clear() { localStorage.removeItem('gt_cookie'); localStorage.removeItem('gt_role_id'); localStorage.removeItem('gt_server'); },
 };
 
+const PROXY_URL = 'https://hoyoassist.adityaputraxd.workers.dev';
+
 async function callProxy(action, extra = {}) {
   const params = new URLSearchParams({ action, role_id: Storage.roleId, server: Storage.server, ...extra });
-  const resp = await fetch(`/.netlify/functions/proxy?${params.toString()}`, {
+  const resp = await fetch(`${PROXY_URL}?${params.toString()}`, {
     headers: { 'x-cookie': Storage.cookie },
   });
   const json = await resp.json();

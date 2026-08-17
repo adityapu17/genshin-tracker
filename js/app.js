@@ -224,7 +224,6 @@ function renderCharacterDetail(el, c) {
   const weapon = c.weapon || {};
   const relics = c.relics || c.reliquaries || [];
   const stats = c.selected_properties || c.base_properties || [];
-
   el.innerHTML = `
     <div class="detail-header">
       <img src="${base.icon}" alt="${base.name}">
@@ -244,12 +243,19 @@ function renderCharacterDetail(el, c) {
     </div>
 
     <div class="section-label">Artefak</div>
-    ${relics.length ? relics.map((r) => `
-      <div class="equip-item">
-        <img src="${r.icon ?? ''}" alt="">
-        <div>
-          <div class="name">${r.name ?? r.pos_name ?? '-'}</div>
-          <div class="sub">+${r.level ?? 0} · ★${r.rarity ?? '-'} · ${r.set?.name ?? ''}</div>
+    ${relics.length ? relics.map((r, i) => `
+      <div class="equip-item-wrap">
+        <div class="equip-item equip-clickable" data-relic-idx="${i}">
+          <img src="${r.icon ?? ''}" alt="">
+          <div style="flex:1">
+            <div class="name">${r.name ?? r.pos_name ?? '-'}</div>
+            <div class="sub">+${r.level ?? 0} · ★${r.rarity ?? '-'} · ${r.set?.name ?? ''}</div>
+          </div>
+          <span class="chevron">▾</span>
+        </div>
+        <div class="relic-stats hidden" id="relic-stats-${i}">
+          ${r.main_property ? `<div class="stat-row main-stat"><span>${r.main_property.info?.name ?? 'Main Stat'}</span><span>${r.main_property.final}</span></div>` : ''}
+          ${(r.sub_property_list || []).map((s) => `<div class="stat-row sub-stat"><span>${s.info?.name ?? 'Sub Stat'}</span><span>${s.final}</span></div>`).join('')}
         </div>
       </div>
     `).join('') : '<p class="muted">Tidak ada data artefak.</p>'}
@@ -260,6 +266,16 @@ function renderCharacterDetail(el, c) {
         : '<p class="muted">Stat detail tidak tersedia dari API.</p>'}
     </div>
   `;
+
+  el.querySelectorAll('.equip-clickable').forEach((row) => {
+    row.addEventListener('click', () => {
+      const idx = row.dataset.relicIdx;
+      const panel = document.getElementById(`relic-stats-${idx}`);
+      const chevron = row.querySelector('.chevron');
+      panel.classList.toggle('hidden');
+      chevron.textContent = panel.classList.contains('hidden') ? '▾' : '▴';
+    });
+  });
 }
 
 document.getElementById('char-modal').addEventListener('click', (e) => {

@@ -1,30 +1,34 @@
-const CACHE = 'genshin-tracker-v3';
-const SHELL = [
-  '/', '/index.html', '/manifest.json',
-  '/css/style.css', '/js/app.js', '/js/api.js',
-  '/icons/icon-192.png', '/icons/icon-512.png'
-];
+const Storage = {
+  get cookie() { return localStorage.getItem('gt_cookie') || ''; },
+  set cookie(v) { localStorage.setItem('gt_cookie', v); },
+  get roleId() { return localStorage.getItem('gt_role_id') || ''; },
+  set roleId(v) { localStorage.setItem('gt_role_id', v); },
+  get server() { return localStorage.getItem('gt_server') || 'os_asia'; },
+  set server(v) { localStorage.setItem('gt_server', v); },
+  clear() { localStorage.removeItem('gt_cookie'); localStorage.removeItem('gt_role_id'); localStorage.removeItem('gt_server'); },
+};
 
-self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)));
-  self.skipWaiting();
-});
+const PROXY_URL = 'https://hoyoassist.adityaputraxd.workers.dev';
 
-self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
-    )
-  );
-  self.clients.claim();
-});
+async function callProxy(action, extra = {}) {
+  const params = new URLSearchParams({ action, role_id: Storage.roleId, server: Storage.server, ...extra });
+  const resp = await fetch(`${PROXY_URL}?${params.toString()}`, {
+    headers: { 'x-cookie': Storage.cookie },
+  });
+  const json = await resp.json();
+  if (json.retcode !== undefined && json.retcode !== 0) {
+    throw new Error(json.message ? `${json.message} (retcode ${json.retcode})` : `retcode ${json.retcode}`);
+  }
+  if (json.error) throw new Error(json.error);
+  return json.data !== undefined ? json.data : json;
+}
 
-// Only cache app shell (static assets). Never cache API calls (Cloudflare Worker / Netlify functions)
-self.addEventListener('fetch', (e) => {
-  const url = new URL(e.request.url);
-  if (url.origin !== self.location.origin) return; // cross-origin (Cloudflare Worker) -> always network
-  if (url.pathname.startsWith('/.netlify/functions/')) return; // always network
-  e.respondWith(
-    caches.match(e.request).then((cached) => cached || fetch(e.request))
-  );
-});
+const Api = {
+  getIndex: () => callProxy('index'),
+  getDailyNote: () => callProxy('dailynote'),
+  getCharacters: () => callProxy('characters'),
+  getCharacterDetail: (ids) => callProxy('characterDetail', { character_ids: JSON.stringify(ids) }),
+  getSignInfo: () => callProxy('signInfo'),
+  getSignHome: () => callProxy('signHome'),
+  doSignIn: () => callProxy('signDo'),
+};

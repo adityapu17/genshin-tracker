@@ -192,7 +192,7 @@ async function loadCharacters(force = false) {
 function renderCharacterGrid(el, chars) {
   el.innerHTML = `<div class="char-grid">${chars.map((c) => `
     <div class="char-card" data-id="${c.id}">
-      <img src="${c.image}" loading="lazy" alt="${c.name}">
+      <img src="${c.icon}" loading="lazy" alt="${c.name}">
       <div class="name">${c.name}</div>
       <div class="lv">Lv.${c.level}</div>
       <div class="const">C${c.actived_constellation_num ?? 0}</div>
@@ -223,11 +223,11 @@ function renderCharacterDetail(el, c) {
   const base = c.base || c;
   const weapon = c.weapon || {};
   const relics = c.relics || c.reliquaries || [];
-  const stats = c.selectedProperties || c.base_properties || c.properties || [];
+  const stats = c.selected_properties || c.base_properties || [];
 
   el.innerHTML = `
     <div class="detail-header">
-      <img src="${base.image}" alt="${base.name}">
+      <img src="${base.icon}" alt="${base.name}">
       <div>
         <div class="name">${base.name}</div>
         <div class="muted">Lv.${base.level} · C${base.actived_constellation_num ?? 0}</div>
@@ -256,7 +256,7 @@ function renderCharacterDetail(el, c) {
 
     <div class="section-label">Stat</div>
     <div class="stat-list">
-      ${stats.length ? stats.map((s) => `<div class="stat-row"><span>${s.name}</span><span>${s.final ?? s.value}</span></div>`).join('')
+      ${stats.length ? stats.map((s) => `<div class="stat-row"><span>${s.info?.name ?? 'Stat'}</span><span>${s.final}</span></div>`).join('')
         : '<p class="muted">Stat detail tidak tersedia dari API.</p>'}
     </div>
   `;

@@ -8,7 +8,7 @@ const Storage = {
   clear() { localStorage.removeItem('gt_cookie'); localStorage.removeItem('gt_role_id'); localStorage.removeItem('gt_server'); },
 };
 
-const PROXY_URL = 'https://hoyoassist.adityaputraxd.workers.dev';
+const PROXY_URL = 'https://hoyoassist.gabel.workers.dev';
 
 async function callProxy(action, extra = {}) {
   const params = new URLSearchParams({ action, role_id: Storage.roleId, server: Storage.server, ...extra });

@@ -218,6 +218,14 @@ async function openCharacterDetail(id) {
   }
 }
 
+// HoyoLab API kadang balikin nilai stat di field yang beda (final / value / num),
+// tergantung endpoint & versi. Coba semua kemungkinan biar gak muncul "undefined".
+function statVal(s) {
+  if (!s) return '-';
+  const v = s.final ?? s.value ?? s.num ?? s.info?.value ?? s.info?.final;
+  return v !== undefined && v !== null && v !== '' ? v : '-';
+}
+
 function renderCharacterDetail(el, c) {
   if (!c) { el.innerHTML = '<p class="error">Data tidak ditemukan.</p>'; return; }
   const base = c.base || c;
@@ -254,15 +262,15 @@ function renderCharacterDetail(el, c) {
           <span class="chevron">▾</span>
         </div>
         <div class="relic-stats hidden" id="relic-stats-${i}">
-          ${r.main_property ? `<div class="stat-row main-stat"><span>${r.main_property.info?.name ?? 'Main Stat'}</span><span>${r.main_property.final}</span></div>` : ''}
-          ${(r.sub_property_list || []).map((s) => `<div class="stat-row sub-stat"><span>${s.info?.name ?? 'Sub Stat'}</span><span>${s.final}</span></div>`).join('')}
+          ${r.main_property ? `<div class="stat-row main-stat"><span>${r.main_property.info?.name ?? r.main_property.name ?? 'Main Stat'}</span><span>${statVal(r.main_property)}</span></div>` : ''}
+          ${(r.sub_property_list || []).map((s) => `<div class="stat-row sub-stat"><span>${s.info?.name ?? s.name ?? 'Sub Stat'}</span><span>${statVal(s)}</span></div>`).join('')}
         </div>
       </div>
     `).join('') : '<p class="muted">Tidak ada data artefak.</p>'}
 
     <div class="section-label">Stat</div>
     <div class="stat-list">
-      ${stats.length ? stats.map((s) => `<div class="stat-row"><span>${s.info?.name ?? 'Stat'}</span><span>${s.final}</span></div>`).join('')
+      ${stats.length ? stats.map((s) => `<div class="stat-row"><span>${s.info?.name ?? s.name ?? 'Stat'}</span><span>${statVal(s)}</span></div>`).join('')
         : '<p class="muted">Stat detail tidak tersedia dari API.</p>'}
     </div>
   `;

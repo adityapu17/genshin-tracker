@@ -70,6 +70,20 @@ exports.handler = async (event) => {
         method = 'POST';
         body = JSON.stringify({ act_id: ACT_ID, region: params.server, uid: params.role_id });
         break;
+      case 'redeemCode': { // redeem kode giveaway (primogem code dsb)
+        if (!params.cdkey) {
+          return { statusCode: 400, headers: cors, body: JSON.stringify({ error: 'Kode belum diisi.' }) };
+        }
+        const q = new URLSearchParams({
+          uid: params.role_id,
+          region: params.server,
+          lang: 'en',
+          cdkey: params.cdkey,
+          game_biz: 'hk4e_global',
+        });
+        url = `https://sg-hk4e-api.hoyoverse.com/common/apicdkey/api/webExchangeCdkey?${q.toString()}`;
+        break;
+      }
       default:
         return { statusCode: 400, headers: cors, body: JSON.stringify({ error: 'Action tidak dikenal.' }) };
     }

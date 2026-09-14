@@ -8,7 +8,9 @@ const Storage = {
   clear() { localStorage.removeItem('gt_cookie'); localStorage.removeItem('gt_role_id'); localStorage.removeItem('gt_server'); },
 };
 
-const PROXY_URL = 'https://hoyoassist.gabel.workers.dev';
+// Pakai Netlify Function di domain yang sama (same-origin), jadi nggak butuh CORS
+// dan nggak gantung ke Cloudflare Worker eksternal (hoyoassist.gabel.workers.dev).
+const PROXY_URL = '/.netlify/functions/proxy';
 
 async function callProxy(action, extra = {}) {
   const params = new URLSearchParams({ action, role_id: Storage.roleId, server: Storage.server, ...extra });
@@ -31,4 +33,5 @@ const Api = {
   getSignInfo: () => callProxy('signInfo'),
   getSignHome: () => callProxy('signHome'),
   doSignIn: () => callProxy('signDo'),
+  redeemCode: (code) => callProxy('redeemCode', { cdkey: code }),
 };

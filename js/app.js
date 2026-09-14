@@ -90,23 +90,32 @@ async function loadHome() {
   const el = document.getElementById('tab-home');
   el.innerHTML = '<div class="spinner">Memuat data...</div>';
   try {
-    const [note, index, signInfo] = await Promise.all([
+    const [note, index, signInfo, signHome] = await Promise.all([
       Api.getDailyNote(),
       Api.getIndex(),
       Api.getSignInfo().catch(() => null),
+      Api.getSignHome().catch(() => null),
     ]);
-    renderHome(el, note, index, signInfo);
+    renderHome(el, note, index, signInfo, signHome);
   } catch (e) {
     el.innerHTML = `<div class="card"><p class="error">Gagal memuat: ${e.message}</p></div>`;
   }
 }
 
-function renderHome(el, note, index, signInfo) {
+function renderHome(el, note, index, signInfo, signHome) {
   const resinPct = Math.min(100, Math.round((note.current_resin / note.max_resin) * 100));
   const role = index.role || {};
   const stats = index.stats || {};
 
   const alreadySigned = signInfo && signInfo.is_sign;
+
+  // Hitung reward hari ini dari kalender bulanan (awards[0] = tanggal 1, dst),
+  // pakai tanggal dari signInfo.today biar akurat sesuai server HoyoLab.
+  let todayReward = null;
+  if (signHome && Array.isArray(signHome.awards) && signInfo && signInfo.today) {
+    const dayOfMonth = parseInt(signInfo.today.split('-')[2], 10);
+    todayReward = signHome.awards[dayOfMonth - 1] || null;
+  }
 
   el.innerHTML = `
     <div class="card">
@@ -142,9 +151,25 @@ function renderHome(el, note, index, signInfo) {
       <div class="row">
         <span>${alreadySigned ? '✅ Sudah check-in hari ini' : '⏳ Belum check-in hari ini'}</span>
       </div>
+      ${todayReward ? `
+        <div class="today-reward">
+          <img src="${todayReward.icon ?? ''}" alt="${todayReward.name ?? ''}">
+          <div>
+            <div class="name">${todayReward.name ?? 'Reward hari ini'}</div>
+            <div class="cnt">x${todayReward.cnt ?? '-'}</div>
+          </div>
+        </div>
+      ` : ''}
       <button class="btn-primary" id="btn-checkin" ${alreadySigned ? 'disabled' : ''}>
         ${alreadySigned ? 'Sudah Check-in' : 'Check-in Sekarang'}
       </button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Redeem Code</div>
+      <input id="redeem-input" class="redeem-input" type="text" placeholder="Masukkan kode redeem" maxlength="20">
+      <button class="btn-primary" id="btn-redeem">Redeem</button>
+      <p id="redeem-result" class="muted" style="margin-top:8px"></p>
     </div>
 
     <div class="card">
@@ -159,6 +184,7 @@ function renderHome(el, note, index, signInfo) {
   `;
 
   document.getElementById('btn-checkin')?.addEventListener('click', doCheckin);
+  document.getElementById('btn-redeem')?.addEventListener('click', doRedeem);
 }
 
 async function doCheckin() {
@@ -171,6 +197,34 @@ async function doCheckin() {
   } catch (e) {
     toast('Gagal check-in: ' + e.message);
     btn.disabled = false; btn.textContent = 'Check-in Sekarang';
+  }
+}
+
+async function doRedeem() {
+  const input = document.getElementById('redeem-input');
+  const resultEl = document.getElementById('redeem-result');
+  const btn = document.getElementById('btn-redeem');
+  const code = input.value.trim().toUpperCase();
+
+  if (!code) {
+    resultEl.textContent = 'Masukkan kode dulu.';
+    resultEl.className = 'error';
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Memproses...';
+  resultEl.textContent = ''; resultEl.className = 'muted';
+  try {
+    await Api.redeemCode(code);
+    resultEl.textContent = `Kode "${code}" berhasil di-redeem! 🎉`;
+    resultEl.className = 'muted';
+    toast('Redeem berhasil! 🎉');
+    input.value = '';
+  } catch (e) {
+    resultEl.textContent = `Gagal redeem "${code}": ${e.message}`;
+    resultEl.className = 'error';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Redeem';
   }
 }
 

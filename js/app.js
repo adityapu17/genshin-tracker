@@ -235,7 +235,7 @@ async function loadCharacters(force = false) {
   if (charsLoaded && !force) return;
   el.innerHTML = '<div class="spinner">Memuat karakter...</div>';
   try {
-    const data = await Api.getCharacters();
+        const data = await Api.getIndex();
     renderCharacterGrid(el, data.avatars || data.list || []);
     charsLoaded = true;
   } catch (e) {

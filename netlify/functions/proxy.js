@@ -47,8 +47,8 @@ exports.handler = async (event) => {
       case 'dailynote': // resin, misi harian, teapot, ekspedisi, transformer real-time
         url = `${BASE_RECORD}/dailyNote?role_id=${params.role_id}&server=${params.server}`;
         break;
-            case 'characters': // daftar semua karakter (ringkas)
-        url = `${BASE_RECORD}/character`;
+      case 'characters': // daftar semua karakter (ringkas)
+        url = `${BASE_RECORD}/character?role_id=${params.role_id}&server=${params.server}`;
         method = 'POST';
         body = JSON.stringify({ role_id: params.role_id, server: params.server });
         break;

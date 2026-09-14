@@ -18,8 +18,9 @@ async function callProxy(action, extra = {}) {
     headers: { 'x-cookie': Storage.cookie },
   });
   const json = await resp.json();
-  if (json.retcode !== undefined && json.retcode !== 0) {
-    throw new Error(json.message ? `${json.message} (retcode ${json.retcode})` : `retcode ${json.retcode}`);
+    if (json.retcode !== undefined && json.retcode !== 0) {
+    const detail = json.message && json.message.trim() ? json.message : JSON.stringify(json);
+    throw new Error(`${detail} (retcode ${json.retcode})`);
   }
   if (json.error) throw new Error(json.error);
   return json.data !== undefined ? json.data : json;

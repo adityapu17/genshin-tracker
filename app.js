@@ -1,0 +1,379 @@
+// ---------- Utilities ----------
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.remove('hidden');
+  setTimeout(() => t.classList.add('hidden'), 2500);
+}
+function fmtTime(seconds) {
+  if (!seconds || seconds <= 0) return 'Penuh';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return `${h}j ${m}m lagi`;
+}
+
+// ---------- Boot ----------
+function boot() {
+  if (Storage.cookie && Storage.roleId) {
+    showApp();
+  } else {
+    showSetup();
+  }
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+
+function showSetup() {
+  document.getElementById('setup-screen').classList.remove('hidden');
+  document.getElementById('app-screen').classList.add('hidden');
+  document.getElementById('setup-server').value = Storage.server;
+  document.getElementById('setup-uid').value = Storage.roleId;
+  document.getElementById('setup-cookie').value = Storage.cookie;
+}
+
+function showApp() {
+  document.getElementById('setup-screen').classList.add('hidden');
+  document.getElementById('app-screen').classList.remove('hidden');
+  loadHome();
+}
+
+document.getElementById('btn-connect').addEventListener('click', async () => {
+  const server = document.getElementById('setup-server').value;
+  const uid = document.getElementById('setup-uid').value.trim();
+  const cookie = document.getElementById('setup-cookie').value.trim();
+  const errEl = document.getElementById('setup-error');
+  errEl.classList.add('hidden');
+
+  if (!uid || !cookie) {
+    errEl.textContent = 'UID dan Cookie wajib diisi.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  Storage.server = server; Storage.roleId = uid; Storage.cookie = cookie;
+
+  const btn = document.getElementById('btn-connect');
+  btn.disabled = true; btn.textContent = 'Menghubungkan...';
+  try {
+    await Api.getIndex(); // test call
+    showApp();
+  } catch (e) {
+    errEl.textContent = 'Gagal konek: ' + e.message + '. Cek lagi cookie & UID kamu.';
+    errEl.classList.remove('hidden');
+    Storage.clear();
+  } finally {
+    btn.disabled = false; btn.textContent = 'Hubungkan';
+  }
+});
+
+document.getElementById('btn-howto').addEventListener('click', () => document.getElementById('howto-modal').classList.remove('hidden'));
+document.getElementById('btn-close-howto').addEventListener('click', () => document.getElementById('howto-modal').classList.add('hidden'));
+
+document.getElementById('btn-settings').addEventListener('click', () => {
+  if (confirm('Putus koneksi akun HoyoLab dari HP ini?')) {
+    Storage.clear();
+    showSetup();
+  }
+});
+
+// ---------- Nav ----------
+document.querySelectorAll('.nav-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-btn').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.tab-panel').forEach((p) => p.classList.add('hidden'));
+    document.getElementById(`tab-${btn.dataset.tab}`).classList.remove('hidden');
+    if (btn.dataset.tab === 'characters') loadCharacters();
+  });
+});
+
+// ---------- Home tab ----------
+async function loadHome() {
+  const el = document.getElementById('tab-home');
+  el.innerHTML = '<div class="spinner">Memuat data...</div>';
+  try {
+    const [note, index, signInfo, signHome] = await Promise.all([
+      Api.getDailyNote(),
+      Api.getIndex(),
+      Api.getSignInfo().catch(() => null),
+      Api.getSignHome().catch(() => null),
+    ]);
+    renderHome(el, note, index, signInfo, signHome);
+  } catch (e) {
+    el.innerHTML = `<div class="card"><p class="error">Gagal memuat: ${e.message}</p></div>`;
+  }
+}
+
+function renderHome(el, note, index, signInfo, signHome) {
+  const resinPct = Math.min(100, Math.round((note.current_resin / note.max_resin) * 100));
+  const role = index.role || {};
+  const stats = index.stats || {};
+
+  const alreadySigned = signInfo && signInfo.is_sign;
+
+  // Hitung reward hari ini dari kalender bulanan (awards[0] = tanggal 1, dst),
+  // pakai tanggal dari signInfo.today biar akurat sesuai server HoyoLab.
+  let todayReward = null;
+  if (signHome && Array.isArray(signHome.awards) && signInfo && signInfo.today) {
+    const dayOfMonth = parseInt(signInfo.today.split('-')[2], 10);
+    todayReward = signHome.awards[dayOfMonth - 1] || null;
+  }
+
+  el.innerHTML = `
+    <div class="card">
+      <div class="row">
+        <div class="card-title">Resin</div>
+        <div class="muted">${fmtTime(note.resin_recovery_time)}</div>
+      </div>
+      <div class="big-stat">${note.current_resin} <span class="muted" style="font-size:16px">/ ${note.max_resin}</span></div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${resinPct}%"></div></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="mini-stat">
+        <div class="label">Misi Harian</div>
+        <div class="val">${note.finished_task_num}/${note.total_task_num}</div>
+      </div>
+      <div class="mini-stat">
+        <div class="label">Ekspedisi</div>
+        <div class="val">${note.current_expedition_num}/${note.max_expedition_num}</div>
+      </div>
+      <div class="mini-stat">
+        <div class="label">Realm Currency</div>
+        <div class="val">${note.current_home_coin ?? '-'}/${note.max_home_coin ?? '-'}</div>
+      </div>
+      <div class="mini-stat">
+        <div class="label">AR / World Level</div>
+        <div class="val">${role.level ?? '-'} / WL${stats.world_level ?? '-'}</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Check-in Harian</div>
+      <div class="row">
+        <span>${alreadySigned ? '✅ Sudah check-in hari ini' : '⏳ Belum check-in hari ini'}</span>
+      </div>
+      ${todayReward ? `
+        <div class="today-reward">
+          <img src="${todayReward.icon ?? ''}" alt="${todayReward.name ?? ''}">
+          <div>
+            <div class="name">${todayReward.name ?? 'Reward hari ini'}</div>
+            <div class="cnt">x${todayReward.cnt ?? '-'}</div>
+          </div>
+        </div>
+      ` : ''}
+      <button class="btn-primary" id="btn-checkin" ${alreadySigned ? 'disabled' : ''}>
+        ${alreadySigned ? 'Sudah Check-in' : 'Check-in Sekarang'}
+      </button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Redeem Code</div>
+      <input id="redeem-input" class="redeem-input" type="text" placeholder="Masukkan kode redeem" maxlength="20">
+      <button class="btn-primary" id="btn-redeem">Redeem</button>
+      <p id="redeem-result" class="muted" style="margin-top:8px"></p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Ringkasan Akun</div>
+      <div class="stat-row"><span>Nickname</span><span>${role.nickname ?? '-'}</span></div>
+      <div class="stat-row"><span>Jumlah Karakter</span><span>${stats.avatar_number ?? '-'}</span></div>
+      <div class="stat-row"><span>Achievement</span><span>${stats.achievement_number ?? '-'}</span></div>
+      <div class="stat-row"><span>Spiral Abyss</span><span>${stats.spiral_abyss ?? '-'}</span></div>
+      <div class="stat-row"><span>Peti Terbuka</span><span>${stats.way_point_number ?? '-'}</span></div>
+      <p class="muted" style="margin-top:10px">Catatan: Mora tidak tersedia lewat API publik HoyoLab, jadi tidak bisa ditampilkan real-time di sini.</p>
+    </div>
+  `;
+
+  document.getElementById('btn-checkin')?.addEventListener('click', doCheckin);
+  document.getElementById('btn-redeem')?.addEventListener('click', doRedeem);
+}
+
+async function doCheckin() {
+  const btn = document.getElementById('btn-checkin');
+  btn.disabled = true; btn.textContent = 'Memproses...';
+  try {
+    await Api.doSignIn();
+    toast('Check-in berhasil! 🎉');
+    loadHome();
+  } catch (e) {
+    toast('Gagal check-in: ' + e.message);
+    btn.disabled = false; btn.textContent = 'Check-in Sekarang';
+  }
+}
+
+async function doRedeem() {
+  const input = document.getElementById('redeem-input');
+  const resultEl = document.getElementById('redeem-result');
+  const btn = document.getElementById('btn-redeem');
+  const code = input.value.trim().toUpperCase();
+
+  if (!code) {
+    resultEl.textContent = 'Masukkan kode dulu.';
+    resultEl.className = 'error';
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Memproses...';
+  resultEl.textContent = ''; resultEl.className = 'muted';
+  try {
+    await Api.redeemCode(code);
+    resultEl.textContent = `Kode "${code}" berhasil di-redeem! 🎉`;
+    resultEl.className = 'muted';
+    toast('Redeem berhasil! 🎉');
+    input.value = '';
+  } catch (e) {
+    // retcode -1071 = HoyoLab minta cookie "account_id" + "cookie_token", beda dari
+    // ltuid/ltoken yang dipakai endpoint lain. Cookie hasil copy dari hoyolab.com
+    // biasanya gak otomatis bawa ini, jadi kasih instruksi spesifik ketimbang cuma
+    // nunjukin pesan mentah dari HoyoLab yang bikin bingung.
+    if (String(e.message).includes('-1071')) {
+      resultEl.innerHTML = 'Gagal redeem: cookie kamu belum ada <b>account_id</b>/<b>cookie_token</b> (beda dari ltuid/ltoken yang dipakai fitur lain). '
+        + 'Buka <b>genshin.hoyoverse.com</b>, login, ambil Cookie-nya dari DevTools (sama kayak cara ambil cookie hoyolab.com), lalu ganti cookie di Pengaturan app ini.';
+      resultEl.className = 'error';
+    } else {
+      resultEl.textContent = `Gagal redeem "${code}": ${e.message}`;
+      resultEl.className = 'error';
+    }
+  } finally {
+    btn.disabled = false; btn.textContent = 'Redeem';
+  }
+}
+
+// ---------- Characters tab ----------
+let charsLoaded = false;
+async function loadCharacters(force = false) {
+  const el = document.getElementById('tab-characters');
+  if (charsLoaded && !force) return;
+  el.innerHTML = '<div class="spinner">Memuat karakter...</div>';
+  try {
+        const data = await Api.getIndex();
+    renderCharacterGrid(el, data.avatars || data.list || []);
+    charsLoaded = true;
+  } catch (e) {
+    el.innerHTML = `<div class="card"><p class="error">Gagal memuat: ${e.message}</p></div>`;
+  }
+}
+
+function renderCharacterGrid(el, chars) {
+  el.innerHTML = `<div class="char-grid">${chars.map((c) => `
+    <div class="char-card" data-id="${c.id}">
+      <img src="${c.icon}" loading="lazy" alt="${c.name}">
+      <div class="name">${c.name}</div>
+      <div class="lv">Lv.${c.level}</div>
+      <div class="const">C${c.actived_constellation_num ?? 0}</div>
+    </div>
+  `).join('')}</div>`;
+
+  el.querySelectorAll('.char-card').forEach((card) => {
+    card.addEventListener('click', () => openCharacterDetail(Number(card.dataset.id)));
+  });
+}
+
+async function openCharacterDetail(id) {
+  const modal = document.getElementById('char-modal');
+  const content = document.getElementById('char-modal-content');
+  modal.classList.remove('hidden');
+  content.innerHTML = '<div class="spinner">Memuat detail...</div>';
+  try {
+    const data = await Api.getCharacterDetail([id]);
+    const c = (data.list || data.avatars || [])[0];
+    renderCharacterDetail(content, c);
+  } catch (e) {
+    content.innerHTML = `<p class="error">Gagal memuat detail: ${e.message}</p>`;
+  }
+}
+
+// HoyoLab API kadang balikin nilai stat di field yang beda (final / value / num),
+// tergantung endpoint & versi. Coba semua kemungkinan biar gak muncul "undefined".
+function statVal(s) {
+  if (!s) return '-';
+  const v = s.final ?? s.value ?? s.num ?? s.info?.value ?? s.info?.final;
+  return v !== undefined && v !== null && v !== '' ? v : '-';
+}
+
+// Endpoint character/detail HoyoLab cuma balikin "property_type" (angka) buat
+// main_property, sub_property_list, dan selected_properties/base_properties —
+// TIDAK ada field nama sama sekali. Makanya UI kita sebelumnya selalu jatuh ke
+// fallback generic ("Sub Stat", "Stat", dst). Ini map property_type -> nama stat,
+// berdasarkan FightPropType enum yang dipakai game (stabil, sama di semua versi).
+const FIGHT_PROP_NAMES = {
+  1: 'HP Dasar', 2: 'HP', 3: 'ATK Dasar', 4: 'ATK', 5: 'DEF Dasar', 6: 'DEF',
+  7: 'Elemental Mastery', 8: 'Energy Recharge',
+  9: 'HP%', 10: 'ATK%', 11: 'DEF%',
+  20: 'CRIT Rate', 22: 'CRIT DMG',
+  23: 'Energy Recharge%', 26: 'Healing Bonus', 27: 'Incoming Healing Bonus',
+  28: 'Elemental Mastery',
+  29: 'Physical RES', 30: 'Physical DMG Bonus',
+  40: 'Pyro DMG Bonus', 41: 'Electro DMG Bonus', 42: 'Hydro DMG Bonus',
+  43: 'Dendro DMG Bonus', 44: 'Anemo DMG Bonus', 45: 'Geo DMG Bonus', 46: 'Cryo DMG Bonus',
+  1000: 'HP', 2000: 'HP', 2001: 'ATK', 2002: 'DEF', 2003: 'Elemental Mastery',
+};
+function statName(s, fallback) {
+  if (!s) return fallback;
+  return s.info?.name ?? s.name ?? FIGHT_PROP_NAMES[s.property_type] ?? fallback;
+}
+
+function renderCharacterDetail(el, c) {
+  if (!c) { el.innerHTML = '<p class="error">Data tidak ditemukan.</p>'; return; }
+  const base = c.base || c;
+  const weapon = c.weapon || {};
+  const relics = c.relics || c.reliquaries || [];
+  const stats = c.selected_properties || c.base_properties || [];
+  el.innerHTML = `
+    <div class="detail-header">
+      <img src="${base.icon}" alt="${base.name}">
+      <div>
+        <div class="name">${base.name}</div>
+        <div class="muted">Lv.${base.level} · C${base.actived_constellation_num ?? 0}</div>
+      </div>
+    </div>
+
+    <div class="section-label">Senjata</div>
+    <div class="equip-item">
+      <img src="${weapon.icon ?? ''}" alt="">
+      <div>
+        <div class="name">${weapon.name ?? '-'}</div>
+        <div class="sub">Lv.${weapon.level ?? '-'} · R${weapon.affix_level ?? '-'} · ★${weapon.rarity ?? '-'}</div>
+      </div>
+    </div>
+
+    <div class="section-label">Artefak</div>
+    ${relics.length ? relics.map((r, i) => `
+      <div class="equip-item-wrap">
+        <div class="equip-item equip-clickable" data-relic-idx="${i}">
+          <img src="${r.icon ?? ''}" alt="">
+          <div style="flex:1">
+            <div class="name">${r.name ?? r.pos_name ?? '-'}</div>
+            <div class="sub">+${r.level ?? 0} · ★${r.rarity ?? '-'} · ${r.set?.name ?? ''}</div>
+          </div>
+          <span class="chevron">▾</span>
+        </div>
+        <div class="relic-stats hidden" id="relic-stats-${i}">
+          ${r.main_property ? `<div class="stat-row main-stat"><span>${statName(r.main_property, 'Main Stat')}</span><span>${statVal(r.main_property)}</span></div>` : ''}
+          ${(r.sub_property_list || []).map((s) => `<div class="stat-row sub-stat"><span>${statName(s, 'Sub Stat')}</span><span>${statVal(s)}</span></div>`).join('')}
+        </div>
+      </div>
+    `).join('') : '<p class="muted">Tidak ada data artefak.</p>'}
+
+    <div class="section-label">Stat</div>
+    <div class="stat-list">
+      ${stats.length ? stats.map((s) => `<div class="stat-row"><span>${statName(s, 'Stat')}</span><span>${statVal(s)}</span></div>`).join('')
+        : '<p class="muted">Stat detail tidak tersedia dari API.</p>'}
+    </div>
+  `;
+
+  el.querySelectorAll('.equip-clickable').forEach((row) => {
+    row.addEventListener('click', () => {
+      const idx = row.dataset.relicIdx;
+      const panel = document.getElementById(`relic-stats-${idx}`);
+      const chevron = row.querySelector('.chevron');
+      panel.classList.toggle('hidden');
+      chevron.textContent = panel.classList.contains('hidden') ? '▾' : '▴';
+    });
+  });
+}
+
+document.getElementById('char-modal').addEventListener('click', (e) => {
+  if (e.target.id === 'char-modal') e.target.classList.add('hidden');
+});
+
+boot();

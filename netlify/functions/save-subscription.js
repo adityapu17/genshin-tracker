@@ -1,43 +1,48 @@
 // POST /.netlify/functions/save-subscription
 // Menerima subscription push (JSON) dari klien, memvalidasi, rate-limit per-IP,
-// dan menyimpan ke /tmp/subscriptions.json (ephemeral: hilang tiap kali instance
-// lambda Netlify cold-start; untuk produksi pakai DB/KV eksternal).
-const fs = require('fs');
-const path = '/tmp/gt_subscriptions.json';
-const RL_PATH = '/tmp/gt_sub_ratelimit.json';
+// dan menyimpan ke Netlify Blobs (persisten antar-invokasi).
+const { getBlob, setBlob } = require("@netlify/blobs");
 const MAX_BYTES = 1024;
 const RL_WINDOW_MS = 60_000;
 const RL_MAX = 5;
 
-function readJson(p, def) { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return def; } }
-function writeJson(p, v) { try { fs.writeFileSync(p, JSON.stringify(v)); } catch { /* /tmp tak bisa write → fallback memori (lihat di bawah) */ } }
-
-const memSubs = [];
-const memRl = {};
-
-function list() {
-  const d = readJson(path, null);
-  return Array.isArray(d) ? d : memSubs;
-}
-function save(arr) {
-  const ok = tryWrite(path, arr);
-  if (!ok) {
-    memSubs.length = 0; memSubs.push(...arr);
+async function getSubscriptions() {
+  try {
+    const data = await getBlob('subscriptions.json');
+    return data ? JSON.parse(data.toString()) : [];
+  } catch {
+    return [];
   }
 }
-function tryWrite(p, v) { try { fs.writeFileSync(p, JSON.stringify(v)); return true; } catch { return false; } }
 
-function rateLimited(ip) {
+async function setSubscriptions(arr) {
+  await setBlob('subscriptions.json', JSON.stringify(arr));
+}
+
+async function getRateLimitStore() {
+  try {
+    const data = await getBlob('ratelimit.json');
+    return data ? JSON.parse(data.toString()) : {};
+  } catch {
+    return {};
+  }
+}
+
+async function setRateLimitStore(store) {
+  await setBlob('ratelimit.json', JSON.stringify(store));
+}
+
+function rateLimited(ip, store) {
   const now = Date.now();
-  const store = readJson(RL_PATH, null) || memRl;
-  if (store[ip] && now - store[ip].t < RL_WINDOW_MS) {
-    if (store[ip].n >= RL_MAX) return true;
-    store[ip].n += 1;
+  const entry = store[ip];
+  if (entry && now - entry.t < RL_WINDOW_MS) {
+    if (entry.n >= RL_MAX) return true;
+    entry.n += 1;
+    return false;
   } else {
     store[ip] = { t: now, n: 1 };
+    return false;
   }
-  writeJson(RL_PATH, store);
-  return false;
 }
 
 exports.handler = async (event) => {
@@ -55,9 +60,14 @@ exports.handler = async (event) => {
   }
 
   const ip = (event.headers['x-nf-client-connection-ip'] || event.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
-  if (rateLimited(ip)) {
+
+  // Rate limit using blob store
+  const rlStore = await getRateLimitStore();
+  if (rateLimited(ip, rlStore)) {
+    await setRateLimitStore(rlStore); // update store (though we already mutated)
     return { statusCode: 429, headers: cors, body: JSON.stringify({ error: 'Terlalu banyak permintaan (max 5/menit/IP).' }) };
   }
+  await setRateLimitStore(rlStore); // persist updates
 
   const raw = event.body || '';
   if (Buffer.byteLength(raw, 'utf8') > MAX_BYTES) {
@@ -80,10 +90,10 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers: cors, body: JSON.stringify({ error: 'keys.harus base64url.' }) };
   }
 
-  const all = list();
+  const all = await getSubscriptions();
   const i = all.findIndex((s) => s.endpoint === endpoint);
   if (i >= 0) all[i] = sub; else all.push(sub);
-  save(all);
+  await setSubscriptions(all);
 
   return { statusCode: 201, headers: { ...cors, 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: true, count: all.length }) };
 };

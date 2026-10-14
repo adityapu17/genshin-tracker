@@ -2,10 +2,16 @@
 // Trigger manual push ke semua subscription tersimpan (uji dev / admin).
 // Menggunakan library web-push + VAPID key dari env var (JANGAN hardcode).
 const webpush = (() => { try { return require('web-push'); } catch { return null; } })();
-const fs = require('fs');
-const SUBS_PATH = '/tmp/gt_subscriptions.json';
+const { getBlob } = require("@netlify/blobs");
 
-function listSubs() { try { const d = JSON.parse(fs.readFileSync(SUBS_PATH, 'utf8')); return Array.isArray(d) ? d : []; } catch { return []; } }
+async function listSubs() {
+  try {
+    const data = await getBlob('subscriptions.json');
+    return data ? JSON.parse(data.toString()) : [];
+  } catch {
+    return [];
+  }
+}
 
 exports.handler = async (event) => {
   const cors = {
@@ -45,7 +51,7 @@ exports.handler = async (event) => {
   const icon = body.icon || '/icons/icon-192.png';
   const payload = JSON.stringify({ title, body: payloadBody, icon });
 
-  const subs = listSubs();
+  const subs = await listSubs();
   const results = { total: subs.length, ok: 0, fail: 0, errors: [] };
   for (const sub of subs) {
     try {

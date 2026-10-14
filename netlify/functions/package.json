@@ -1,0 +1,9 @@
+{
+  "name": "genshin-tracker-netlify-functions",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Dependensi tambahan yang dipakai oleh Netlify Functions.",
+  "dependencies": {
+    "web-push": "^3.7.0"
+  }
+}

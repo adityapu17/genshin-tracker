@@ -11,6 +11,9 @@
 <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="stylesheet" href="css/style.css">
+<!-- VAPID public key diisi saat build ( Netlify env var VAPID_PUBLIC_KEY ).
+     Kosongkan = fitur push remote tidak aktif, tapi push lokal (resin/check-in) tetap jalan. -->
+<meta name="vapid-public-key" content="">
 </head>
 <body>
 
@@ -64,11 +67,13 @@
   <main id="main-content">
     <div id="tab-home" class="tab-panel"></div>
     <div id="tab-characters" class="tab-panel hidden"></div>
+    <div id="tab-wish" class="tab-panel hidden"></div>
   </main>
 
   <nav class="bottom-nav">
     <button class="nav-btn active" data-tab="home">🏠<span>Home</span></button>
     <button class="nav-btn" data-tab="characters">🧑‍🤝‍🧑<span>Karakter</span></button>
+    <button class="nav-btn" data-tab="wish">🎁<span>Wish</span></button>
   </nav>
 </div>
 

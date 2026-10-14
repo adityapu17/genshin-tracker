@@ -1,4 +1,24 @@
 // ---------- Utilities ----------
+// Escape SEMUA string dari API/user sebelum masuk innerHTML (mitigasi XSS —
+// nickname, nama karakter/senjata/artefak, pesan error, dst. bisa mengandung < > " ' &).
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
+const IMG_FALLBACK = "data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Crect width=%22100%22 height=%22100%22 fill=%22%232a2a3a%22/%3E%3C/svg%3E";
+
+// Ganti onerror inline (diblokir CSP script-src 'self') dengan listener JS setelah render.
+function wireImgFallback(root) {
+  (root || document).querySelectorAll('img[data-fallback]').forEach((img) => {
+    img.addEventListener('error', () => {
+      img.removeAttribute('data-fallback');
+      img.src = IMG_FALLBACK;
+    }, { once: true });
+  });
+}
+
 function toast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -34,6 +54,7 @@ function showApp() {
   document.getElementById('setup-screen').classList.add('hidden');
   document.getElementById('app-screen').classList.remove('hidden');
   loadHome();
+  if (typeof window.initPush === 'function') window.initPush();
 }
 
 document.getElementById('btn-connect').addEventListener('click', async () => {
@@ -82,6 +103,7 @@ document.querySelectorAll('.nav-btn').forEach((btn) => {
     document.querySelectorAll('.tab-panel').forEach((p) => p.classList.add('hidden'));
     document.getElementById(`tab-${btn.dataset.tab}`).classList.remove('hidden');
     if (btn.dataset.tab === 'characters') loadCharacters();
+    if (btn.dataset.tab === 'wish') renderWishShell();
   });
 });
 
@@ -98,7 +120,7 @@ async function loadHome() {
     ]);
     renderHome(el, note, index, signInfo, signHome);
   } catch (e) {
-    el.innerHTML = `<div class="card"><p class="error">Gagal memuat: ${e.message}</p></div>`;
+    el.innerHTML = `<div class="card"><p class="error">Gagal memuat: ${esc(e.message)}</p></div>`;
   }
 }
 
@@ -121,28 +143,28 @@ function renderHome(el, note, index, signInfo, signHome) {
     <div class="card">
       <div class="row">
         <div class="card-title">Resin</div>
-        <div class="muted">${fmtTime(note.resin_recovery_time)}</div>
+        <div class="muted">${esc(fmtTime(note.resin_recovery_time))}</div>
       </div>
-      <div class="big-stat">${note.current_resin} <span class="muted" style="font-size:16px">/ ${note.max_resin}</span></div>
+      <div class="big-stat">${esc(note.current_resin)} <span class="muted" style="font-size:16px">/ ${esc(note.max_resin)}</span></div>
       <div class="progress-bar"><div class="progress-fill" style="width:${resinPct}%"></div></div>
     </div>
 
     <div class="grid-2">
       <div class="mini-stat">
         <div class="label">Misi Harian</div>
-        <div class="val">${note.finished_task_num}/${note.total_task_num}</div>
+        <div class="val">${esc(note.finished_task_num)}/${esc(note.total_task_num)}</div>
       </div>
       <div class="mini-stat">
         <div class="label">Ekspedisi</div>
-        <div class="val">${note.current_expedition_num}/${note.max_expedition_num}</div>
+        <div class="val">${esc(note.current_expedition_num)}/${esc(note.max_expedition_num)}</div>
       </div>
       <div class="mini-stat">
         <div class="label">Realm Currency</div>
-        <div class="val">${note.current_home_coin ?? '-'}/${note.max_home_coin ?? '-'}</div>
+        <div class="val">${esc(note.current_home_coin ?? '-')}/${esc(note.max_home_coin ?? '-')}</div>
       </div>
       <div class="mini-stat">
         <div class="label">AR / World Level</div>
-        <div class="val">${role.level ?? '-'} / WL${stats.world_level ?? '-'}</div>
+        <div class="val">${esc(role.level ?? '-')} / WL${esc(stats.world_level ?? '-')}</div>
       </div>
     </div>
 
@@ -153,10 +175,10 @@ function renderHome(el, note, index, signInfo, signHome) {
       </div>
       ${todayReward ? `
         <div class="today-reward">
-          <img src="${todayReward.icon ?? ''}" alt="${todayReward.name ?? ''}">
+          <img src="${esc(todayReward.icon ?? '')}" alt="${esc(todayReward.name ?? '')}" data-fallback>
           <div>
-            <div class="name">${todayReward.name ?? 'Reward hari ini'}</div>
-            <div class="cnt">x${todayReward.cnt ?? '-'}</div>
+            <div class="name">${esc(todayReward.name ?? 'Reward hari ini')}</div>
+            <div class="cnt">x${esc(todayReward.cnt ?? '-')}</div>
           </div>
         </div>
       ` : ''}
@@ -164,6 +186,8 @@ function renderHome(el, note, index, signInfo, signHome) {
         ${alreadySigned ? 'Sudah Check-in' : 'Check-in Sekarang'}
       </button>
     </div>
+
+    <div class="card" id="push-card"></div>
 
     <div class="card">
       <div class="card-title">Redeem Code</div>
@@ -174,17 +198,20 @@ function renderHome(el, note, index, signInfo, signHome) {
 
     <div class="card">
       <div class="card-title">Ringkasan Akun</div>
-      <div class="stat-row"><span>Nickname</span><span>${role.nickname ?? '-'}</span></div>
-      <div class="stat-row"><span>Jumlah Karakter</span><span>${stats.avatar_number ?? '-'}</span></div>
-      <div class="stat-row"><span>Achievement</span><span>${stats.achievement_number ?? '-'}</span></div>
-      <div class="stat-row"><span>Spiral Abyss</span><span>${stats.spiral_abyss ?? '-'}</span></div>
-      <div class="stat-row"><span>Peti Terbuka</span><span>${stats.way_point_number ?? '-'}</span></div>
+      <div class="stat-row"><span>Nickname</span><span>${esc(role.nickname ?? '-')}</span></div>
+      <div class="stat-row"><span>Jumlah Karakter</span><span>${esc(stats.avatar_number ?? '-')}</span></div>
+      <div class="stat-row"><span>Achievement</span><span>${esc(stats.achievement_number ?? '-')}</span></div>
+      <div class="stat-row"><span>Spiral Abyss</span><span>${esc(stats.spiral_abyss ?? '-')}</span></div>
+      <div class="stat-row"><span>Peti Terbuka</span><span>${esc(stats.way_point_number ?? '-')}</span></div>
       <p class="muted" style="margin-top:10px">Catatan: Mora tidak tersedia lewat API publik HoyoLab, jadi tidak bisa ditampilkan real-time di sini.</p>
     </div>
   `;
 
+  wireImgFallback(el);
   document.getElementById('btn-checkin')?.addEventListener('click', doCheckin);
   document.getElementById('btn-redeem')?.addEventListener('click', doRedeem);
+  // push.js mengisi kartu notifikasi + mulai polling resin kalau tersedia
+  if (typeof window.renderPushCard === 'function') window.renderPushCard();
 }
 
 async function doCheckin() {
@@ -235,11 +262,11 @@ async function loadCharacters(force = false) {
   if (charsLoaded && !force) return;
   el.innerHTML = '<div class="spinner">Memuat karakter...</div>';
   try {
-        const data = await Api.getIndex();
+    const data = await Api.getIndex();
     renderCharacterGrid(el, data.avatars || data.list || []);
     charsLoaded = true;
   } catch (e) {
-    el.innerHTML = `<div class="card"><p class="error">Gagal memuat: ${e.message}</p></div>`;
+    el.innerHTML = `<div class="card"><p class="error">Gagal memuat: ${esc(e.message)}</p></div>`;
   }
 }
 
@@ -251,14 +278,15 @@ function charIcon(c) {
 
 function renderCharacterGrid(el, chars) {
   el.innerHTML = `<div class="char-grid">${chars.map((c) => `
-    <div class="char-card" data-id="${c.id}">
-      <img src="${charIcon(c)}" loading="lazy" alt="${c.name}" onerror="this.onerror=null;this.classList.add('img-fallback');this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Crect width=%22100%22 height=%22100%22 fill=%22%232a2a3a%22/%3E%3C/svg%3E';">
-      <div class="name">${c.name}</div>
-      <div class="lv">Lv.${c.level}</div>
-      <div class="const">C${c.actived_constellation_num ?? 0}</div>
+    <div class="char-card" data-id="${esc(c.id)}">
+      <img src="${esc(charIcon(c))}" loading="lazy" alt="${esc(c.name)}" data-fallback>
+      <div class="name">${esc(c.name)}</div>
+      <div class="lv">Lv.${esc(c.level)}</div>
+      <div class="const">C${esc(c.actived_constellation_num ?? 0)}</div>
     </div>
   `).join('')}</div>`;
 
+  wireImgFallback(el);
   el.querySelectorAll('.char-card').forEach((card) => {
     card.addEventListener('click', () => openCharacterDetail(Number(card.dataset.id)));
   });
@@ -274,7 +302,7 @@ async function openCharacterDetail(id) {
     const c = (data.list || data.avatars || [])[0];
     renderCharacterDetail(content, c, data.property_map || {});
   } catch (e) {
-    content.innerHTML = `<p class="error">Gagal memuat detail: ${e.message}</p>`;
+    content.innerHTML = `<p class="error">Gagal memuat detail: ${esc(e.message)}</p>`;
   }
 }
 
@@ -304,19 +332,19 @@ function renderCharacterDetail(el, c, propertyMap) {
   const stats = c.selected_properties || c.base_properties || [];
   el.innerHTML = `
     <div class="detail-header">
-      <img src="${charIcon(base)}" alt="${base.name}" onerror="this.onerror=null;this.style.visibility='hidden';">
+      <img src="${esc(charIcon(base))}" alt="${esc(base.name)}" data-fallback-hide>
       <div>
-        <div class="name">${base.name}</div>
-        <div class="muted">Lv.${base.level} · C${base.actived_constellation_num ?? 0}</div>
+        <div class="name">${esc(base.name)}</div>
+        <div class="muted">Lv.${esc(base.level)} · C${esc(base.actived_constellation_num ?? 0)}</div>
       </div>
     </div>
 
     <div class="section-label">Senjata</div>
     <div class="equip-item">
-      <img src="${weapon.icon ?? ''}" alt="" onerror="this.onerror=null;this.style.visibility='hidden';">
+      <img src="${esc(weapon.icon ?? '')}" alt="" data-fallback-hide>
       <div>
-        <div class="name">${weapon.name ?? '-'}</div>
-        <div class="sub">Lv.${weapon.level ?? '-'} · R${weapon.affix_level ?? '-'} · ★${weapon.rarity ?? '-'}</div>
+        <div class="name">${esc(weapon.name ?? '-')}</div>
+        <div class="sub">Lv.${esc(weapon.level ?? '-')} · R${esc(weapon.affix_level ?? '-')} · ★${esc(weapon.rarity ?? '-')}</div>
       </div>
     </div>
 
@@ -324,26 +352,31 @@ function renderCharacterDetail(el, c, propertyMap) {
     ${relics.length ? relics.map((r, i) => `
       <div class="equip-item-wrap">
         <div class="equip-item equip-clickable" data-relic-idx="${i}">
-          <img src="${r.icon ?? ''}" alt="" onerror="this.onerror=null;this.style.visibility='hidden';">
+          <img src="${esc(r.icon ?? '')}" alt="" data-fallback-hide>
           <div style="flex:1">
-            <div class="name">${r.name ?? r.pos_name ?? '-'}</div>
-            <div class="sub">+${r.level ?? 0} · ★${r.rarity ?? '-'} · ${r.set?.name ?? ''}</div>
+            <div class="name">${esc(r.name ?? r.pos_name ?? '-')}</div>
+            <div class="sub">+${esc(r.level ?? 0)} · ★${esc(r.rarity ?? '-')} · ${esc(r.set?.name ?? '')}</div>
           </div>
           <span class="chevron">▾</span>
         </div>
         <div class="relic-stats hidden" id="relic-stats-${i}">
-          ${r.main_property ? `<div class="stat-row main-stat"><span>${statName(r.main_property, propertyMap, 'Main Stat')}</span><span>${statVal(r.main_property)}</span></div>` : ''}
-          ${(r.sub_property_list || []).map((s) => `<div class="stat-row sub-stat"><span>${statName(s, propertyMap, 'Sub Stat')}</span><span>${statVal(s)}</span></div>`).join('')}
+          ${r.main_property ? `<div class="stat-row main-stat"><span>${esc(statName(r.main_property, propertyMap, 'Main Stat'))}</span><span>${esc(statVal(r.main_property))}</span></div>` : ''}
+          ${(r.sub_property_list || []).map((s) => `<div class="stat-row sub-stat"><span>${esc(statName(s, propertyMap, 'Sub Stat'))}</span><span>${esc(statVal(s))}</span></div>`).join('')}
         </div>
       </div>
     `).join('') : '<p class="muted">Tidak ada data artefak.</p>'}
 
     <div class="section-label">Stat</div>
     <div class="stat-list">
-      ${stats.length ? stats.map((s) => `<div class="stat-row"><span>${statName(s, propertyMap, 'Stat')}</span><span>${statVal(s)}</span></div>`).join('')
+      ${stats.length ? stats.map((s) => `<div class="stat-row"><span>${esc(statName(s, propertyMap, 'Stat'))}</span><span>${esc(statVal(s))}</span></div>`).join('')
         : '<p class="muted">Stat detail tidak tersedia dari API.</p>'}
     </div>
   `;
+
+  // gambar gagal load di detail → sembunyikan saja (bukan placeholder)
+  el.querySelectorAll('img[data-fallback-hide]').forEach((img) => {
+    img.addEventListener('error', () => { img.style.visibility = 'hidden'; }, { once: true });
+  });
 
   el.querySelectorAll('.equip-clickable').forEach((row) => {
     row.addEventListener('click', () => {
@@ -359,5 +392,157 @@ function renderCharacterDetail(el, c, propertyMap) {
 document.getElementById('char-modal').addEventListener('click', (e) => {
   if (e.target.id === 'char-modal') e.target.classList.add('hidden');
 });
+
+// ---------- Wish tab ----------
+// Sumber data: endpoint gacha_info/api/getGachaLog milik HoYoLab yang dipakai
+// halaman "Wish History" di dalam game. Butuh authkey yang cuma bisa didapat
+// dari URL webview game (bukan cookie), jadi user paste URL-nya sekali per sesi.
+const WISH_BANNERS = [
+  { type: '301', label: 'Karakter Event (banner aktif)' },
+  { type: '400', label: 'Karakter Event-2' },
+  { type: '302', label: 'Senjata (Epitonic Invocation)' },
+  { type: '200', label: 'Standar (Wanderlust Invocation)' },
+  { type: '100', label: 'Pemula (Beginner)' },
+];
+const WISH_ITEM_TYPE = { 1: 'Karakter', 2: 'Senjata', 3: 'Material' };
+const WISH_PAGES_PER_LOAD = 4;   // 4 x 25 = 100 tarikan per klik
+const WISH_PAGE_SIZE = 25;       // proxy clamp maksimal 50
+
+let wishState = { list: [], endId: '0', more: true, loading: false, gachaType: '301' };
+
+// Terima URL lengkap getGachaLog / halaman wish, atau nilai authkey mentah.
+function extractAuthkey(input) {
+  const m = String(input || '').match(/[?&]authkey(?:_new)?=([^&#\s]+)/i);
+  if (m) return decodeURIComponent(m[1]);
+  return String(input || '').trim();
+}
+
+function wishAuthkeyGet() { return sessionStorage.getItem('gt_wish_authkey') || ''; }
+function wishAuthkeySet(v) { v ? sessionStorage.setItem('gt_wish_authkey', v) : sessionStorage.removeItem('gt_wish_authkey'); }
+
+function renderWishShell() {
+  const el = document.getElementById('tab-wish');
+  if (el.dataset.ready === '1') return; // shell dibuat sekali; hasil tetap bisa refresh
+  el.dataset.ready = '1';
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-title">Riwayat Wish</div>
+      <p class="muted" style="font-size:13px">Buka Wish → History <b>di dalam game</b>, lalu salin URL request
+      <code>getGachaLog</code> (dari DevTools/mitm, atau URL halaman wish) dan tempel di sini.
+      Authkey hanya dipakai per-request dan tidak disimpan di server maupun localStorage (hanya sessionStorage tab ini).</p>
+      <textarea id="wish-url" rows="3" class="redeem-input" placeholder="Tempel URL riwayat wish / authkey di sini..."></textarea>
+      <label class="muted" for="wish-banner" style="font-size:12px">Banner</label>
+      <select id="wish-banner">
+        ${WISH_BANNERS.map((b) => `<option value="${b.type}">${esc(b.label)}</option>`).join('')}
+      </select>
+      <div class="row" style="margin-top:8px;gap:8px">
+        <button class="btn-primary" id="btn-wish-load" style="flex:1">Muat Riwayat</button>
+        <button class="btn-secondary" id="btn-wish-more" style="flex:1">Muat Lebih Banyak</button>
+      </div>
+    </div>
+    <div id="wish-results"></div>
+  `;
+  const saved = wishAuthkeyGet();
+  if (saved) document.getElementById('wish-url').value = saved;
+  document.getElementById('btn-wish-load').addEventListener('click', () => loadWish(true));
+  document.getElementById('btn-wish-more').addEventListener('click', () => loadWish(false));
+  document.getElementById('wish-banner').addEventListener('change', () => loadWish(true));
+  if (saved) loadWish(true);
+}
+
+async function loadWish(reset) {
+  if (wishState.loading) return;
+  const resultsEl = document.getElementById('wish-results');
+  const bannerSel = document.getElementById('wish-banner');
+  const gachaType = bannerSel ? bannerSel.value : wishState.gachaType;
+
+  if (reset) wishState = { list: [], endId: '0', more: true, loading: false, gachaType };
+
+  let authkey = extractAuthkey(document.getElementById('wish-url').value);
+  if (!authkey) authkey = wishAuthkeyGet();
+  if (!authkey) {
+    resultsEl.innerHTML = '<div class="card"><p class="error">Tempel URL riwayat Wish atau authkey dulu.</p></div>';
+    return;
+  }
+  wishAuthkeySet(authkey);
+  if (!wishState.more) return;
+
+  wishState.loading = true;
+  const btn = document.getElementById('btn-wish-load');
+  if (btn) btn.disabled = true;
+  resultsEl.innerHTML = '<div class="spinner">Memuat riwayat wish...</div>';
+  try {
+    let pages = 0;
+    while (pages < WISH_PAGES_PER_LOAD && wishState.more) {
+      const data = await Api.getWish({
+        authkey,
+        gacha_type: gachaType,
+        page: 1,
+        size: WISH_PAGE_SIZE,
+        end_id: wishState.endId,
+      });
+      const list = data.list || [];
+      if (!list.length) { wishState.more = false; break; }
+      // API kirim terbaru dulu; end_id = id paling lama di halaman ini utk halaman berikutnya
+      wishState.list = wishState.list.concat(list);
+      wishState.endId = String(list[list.length - 1].id ?? '0');
+      wishState.more = list.length >= WISH_PAGE_SIZE;
+      pages++;
+    }
+    renderWish(resultsEl, wishState.list);
+  } catch (e) {
+    resultsEl.innerHTML = `<div class="card"><p class="error">Gagal memuat: ${esc(e.message)}</p>
+      <p class="muted" style="font-size:12px">Authkey dari game cepat kedaluwarsa — kalau error -101/-1015, buka History di game lagi dan paste URL baru.</p></div>`;
+    wishState.more = false;
+  } finally {
+    wishState.loading = false;
+    wishState.gachaType = gachaType;
+    if (btn) btn.disabled = false;
+    renderWish(resultsEl, wishState.list);
+  }
+}
+
+function renderWish(el, list) {
+  if (!el) return;
+  if (!list.length) { el.innerHTML = ''; return; }
+
+  // list datang terbaru→terlama; pity = hitungan mundur dari yang terbaru
+  const fiveTotal = list.filter((w) => String(w.rank_type) === '5').length;
+  const fourTotal = list.filter((w) => String(w.rank_type) === '4').length;
+  const idx5 = list.findIndex((w) => String(w.rank_type) === '5');
+  const idx4 = list.findIndex((w) => String(w.rank_type) === '4');
+  const pity5 = idx5 === -1 ? list.length : idx5;
+  const pity4 = idx4 === -1 ? list.length : idx4;
+
+  el.innerHTML = `
+    <div class="grid-2">
+      <div class="mini-stat"><div class="label">Pity 5★ sekarang</div><div class="val r5">${pity5}</div></div>
+      <div class="mini-stat"><div class="label">Pity 4★ sekarang</div><div class="val r4">${pity4}</div></div>
+      <div class="mini-stat"><div class="label">Total 5★ termuat</div><div class="val r5">${fiveTotal}</div></div>
+      <div class="mini-stat"><div class="label">Total 4★ termuat</div><div class="val r4">${fourTotal}</div></div>
+    </div>
+    <div class="card">
+      <p class="muted" style="font-size:12px">Pity dihitung dari ${list.length} tarikan terakhir yang dimuat (bukan seluruh riwayat akun).</p>
+      <div class="wish-table-wrap">
+        <table class="wish-table">
+          <thead><tr><th>Waktu</th><th>Item</th><th>Rarity</th><th>Tipe</th></tr></thead>
+          <tbody>
+            ${list.map((w) => {
+              const r = String(w.rank_type || '');
+              return `<tr class="r${esc(r)}">
+                <td class="muted">${esc(w.time)}</td>
+                <td>${esc(w.name)}</td>
+                <td>${'★'.repeat(Number(r) || 0)}</td>
+                <td class="muted">${esc(WISH_ITEM_TYPE[w.item_type] ?? '-')}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+      <button class="btn-secondary" id="btn-wish-refresh" style="margin-top:10px">Refresh</button>
+    </div>
+  `;
+  document.getElementById('btn-wish-refresh')?.addEventListener('click', () => loadWish(true));
+}
 
 boot();

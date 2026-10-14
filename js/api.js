@@ -26,6 +26,22 @@ async function callProxy(action, extra = {}) {
   return json.data !== undefined ? json.data : json;
 }
 
+// Wish history TIDAK pakai cookie — pakai authkey yang diambil dari URL
+// riwayat Wish di dalam game (dikirim via header x-authkey, tidak disimpan server).
+async function callProxyWish({ authkey = '', ...extra } = {}) {
+  const params = new URLSearchParams({ action: 'wish', server: Storage.server, ...extra });
+  // authkey HANYA lewat header, jangan masuk query string (biar tidak ke-log di access log CDN/Netlify).
+  const resp = await fetch(`${PROXY_URL}?${params.toString()}`, {
+    headers: { 'x-authkey': authkey },
+  });
+  const json = await resp.json();
+  if (json.error) throw new Error(json.error);
+  if (json.retcode !== undefined && json.retcode !== 0) {
+    throw new Error(`${json.message || 'Gagal'} (retcode ${json.retcode})`);
+  }
+  return json.data !== undefined ? json.data : json;
+}
+
 const Api = {
   getIndex: () => callProxy('index'),
   getDailyNote: () => callProxy('dailynote'),
@@ -35,4 +51,6 @@ const Api = {
   getSignHome: () => callProxy('signHome'),
   doSignIn: () => callProxy('signDo'),
   redeemCode: (code) => callProxy('redeemCode', { cdkey: code }),
+  getWish: ({ authkey, gacha_type, page = 1, size = 25, end_id = 0 }) =>
+    callProxyWish({ authkey, gacha_type, page, size, end_id }),
 };

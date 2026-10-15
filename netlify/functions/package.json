@@ -4,7 +4,7 @@
   "private": true,
   "description": "Dependensi tambahan yang dipakai oleh Netlify Functions.",
   "dependencies": {
-    "web-push": "^3.7.0",
-    "@netlify/blobs": "^0.8.0"
+    "web-push": "^3.6.7",
+    "@netlify/blobs": "^11.1.4"
   }
 }

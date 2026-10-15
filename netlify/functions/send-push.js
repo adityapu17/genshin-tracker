@@ -4,23 +4,30 @@
 const webpush = (() => { try { return require("web-push"); } catch { return null; } })();
 const { getStore } = require("@netlify/blobs");
 
-const store = getStore("genshin-push");
+const SITE_ID = "710a0832-00e6-424d-b61e-8addac859f2a";
+// Mode auto (kalau toggle Blobs site sudah aktif -> NETLIFY_BLOBS_CONTEXT di-inject platform).
+function blobsStore() {
+  if (process.env.NETLIFY_BLOBS_CONTEXT) return getStore("genshin-push");
+  return getStore({ name: "genshin-push", siteID: SITE_ID, token: process.env.NETLIFY_FUNCTIONS_TOKEN, context: "production" });
+}
 
 async function listSubs() {
   try {
-    const d = await store.getJSON("subscriptions");
+    const d = await blobsStore().getJSON("subscriptions");
     return Array.isArray(d) ? d : [];
-  } catch {
-    return [];
+  } catch (e) {
+    console.error("subscriptions read error:", e && e.message);
+    return null; // null = storage gagal; bedakan dari array kosong
   }
 }
 
-exports.handler = async (event) => {
-  const cors = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type, x-admin-key",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-  };
+const cors = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "Content-Type, x-admin-key",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+async function main(event) {
   if (event.httpMethod === "OPTIONS") return { statusCode: 200, headers: cors, body: "" };
   if (event.httpMethod !== "POST") return { statusCode: 405, headers: cors, body: JSON.stringify({ error: "POST only." }) };
 
@@ -54,6 +61,10 @@ exports.handler = async (event) => {
   const payload = JSON.stringify({ title, body: payloadBody, icon });
 
   const subs = await listSubs();
+  if (subs === null) {
+    return { statusCode: 503, headers: { ...cors, "Content-Type": "application/json" },
+      body: JSON.stringify({ error: "Penyimpanan server belum siap (Netlify Blobs aktifkan dulu di Site configuration → Blobs)." }) };
+  }
   const results = { total: subs.length, ok: 0, fail: 0, errors: [] };
   for (const sub of subs) {
     try {
@@ -69,4 +80,15 @@ exports.handler = async (event) => {
     }
   }
   return { statusCode: 200, headers: { ...cors, "Content-Type": "application/json" }, body: JSON.stringify(results) };
+}
+
+exports.handler = async (event) => {
+  try {
+    return await main(event);
+  } catch (e) {
+    // Jangan pernah bocorkan stack trace / internal ke klien.
+    console.error("send-push error:", e && e.message);
+    return { statusCode: 500, headers: { ...cors, "Content-Type": "application/json" },
+      body: JSON.stringify({ error: "Terjadi kesalahan internal." }) };
+  }
 };

@@ -34,11 +34,14 @@ function fmtTime(seconds) {
 
 // ---------- Boot ----------
 function boot() {
-  if (Storage.cookie && Storage.roleId) {
-    showApp();
-  } else {
-    showSetup();
-  }
+  // Splash dulu (3 detik), baru tampilkan setup/app.
+  Splash.run(SPLASH_DURATION_MS).then(() => {
+    if (Storage.cookie && Storage.roleId) {
+      showApp();
+    } else {
+      showSetup();
+    }
+  });
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
 

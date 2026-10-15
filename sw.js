@@ -1,7 +1,7 @@
-const CACHE = 'genshin-tracker-v10';
+const CACHE = 'genshin-tracker-v11';
 const SHELL = [
   '/', '/index.html', '/manifest.json',
-  '/css/style.css', '/js/api.js', '/js/app.js', '/js/push.js',
+  '/css/style.css', '/js/api.js', '/js/app.js', '/js/push.js', '/js/splash.js',
   '/icons/icon-192.png', '/icons/icon-512.png',
 ];
 

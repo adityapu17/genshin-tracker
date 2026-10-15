@@ -1,0 +1,133 @@
+diff --git a/css/style.css b/css/style.css
+index 2f4371b..c13600b 100644
+--- a/css/style.css
++++ b/css/style.css
+@@ -135,3 +135,12 @@ body {
+ }
+ .spinner { text-align: center; padding: 30px; color: var(--muted); }
+ 
++
++/* Splash (ditampilkan 3 detik saat app dibuka) */
++.splash {
++  position: fixed; inset: 0; z-index: 1000; background: var(--bg);
++  display: flex; align-items: center; justify-content: center;
++  transition: opacity .4s ease;
++}
++.splash.fade-out { opacity: 0; pointer-events: none; }
++.splash img { max-width: 100%; max-height: 100%; object-fit: cover; width: 100%; height: 100%; }
+diff --git a/index.html b/index.html
+index b8a3382..02b1a1d 100644
+--- a/index.html
++++ b/index.html
+@@ -17,6 +17,10 @@
+ </head>
+ <body>
+ 
++<div id="splash" class="splash">
++  <img id="splash-img" alt="">
++</div>
++
+ <div id="setup-screen" class="screen hidden">
+   <div class="setup-card">
+     <h1>Genshin Tracker</h1>
+@@ -83,6 +87,7 @@
+ 
+ <div id="toast" class="toast hidden"></div>
+ 
++<script src="js/splash.js"></script>
+ <script src="js/api.js"></script>
+ <script src="js/app.js"></script>
+ </body>
+diff --git a/js/app.js b/js/app.js
+index 0932628..bd80922 100644
+--- a/js/app.js
++++ b/js/app.js
+@@ -34,11 +34,14 @@ function fmtTime(seconds) {
+ 
+ // ---------- Boot ----------
+ function boot() {
+-  if (Storage.cookie && Storage.roleId) {
+-    showApp();
+-  } else {
+-    showSetup();
+-  }
++  // Splash dulu (3 detik), baru tampilkan setup/app.
++  Splash.run(SPLASH_DURATION_MS).then(() => {
++    if (Storage.cookie && Storage.roleId) {
++      showApp();
++    } else {
++      showSetup();
++    }
++  });
+   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+ }
+ 
+diff --git a/js/splash.js b/js/splash.js
+new file mode 100644
+index 0000000..d550d2a
+--- /dev/null
++++ b/js/splash.js
+@@ -0,0 +1,31 @@
++// Splash screen: gambar diambil dari endpoint server (/.netlify/functions/splash),
++// yang membaca sumber splash HoYoLab. Kalau gagal, pakai icon app sebagai fallback.
++const SPLASH_DURATION_MS = 3000;
++const SPLASH_FALLBACK = 'icons/icon-512.png';
++
++const Splash = {
++  async fetchImageUrl() {
++    try {
++      const resp = await fetch('/.netlify/functions/splash', { cache: 'no-store' });
++      const json = await resp.json();
++      return json.url || SPLASH_FALLBACK;
++    } catch {
++      return SPLASH_FALLBACK;
++    }
++  },
++
++  run(durationMs) {
++    const el = document.getElementById('splash');
++    const img = document.getElementById('splash-img');
++    if (!el || !img) return Promise.resolve();
++    const minWait = new Promise((r) => setTimeout(r, durationMs));
++    const imgReady = this.fetchImageUrl().then((url) => {
++      img.onerror = () => { img.onerror = null; img.src = SPLASH_FALLBACK; };
++      img.src = url;
++    });
++    return Promise.all([minWait, imgReady]).then(() => {
++      el.classList.add('fade-out');
++      return new Promise((r) => setTimeout(() => { el.classList.add('hidden'); r(); }, 400));
++    });
++  },
++};
+diff --git a/netlify/functions/splash.js b/netlify/functions/splash.js
+new file mode 100644
+index 0000000..13d97db
+--- /dev/null
++++ b/netlify/functions/splash.js
+@@ -0,0 +1,12 @@
++// Mengembalikan URL gambar splash. Sumber diatur lewat env var SPLASH_URL di Netlify
++// (isi dengan URL gambar splash HoYoLab yang kamu temukan).
++// Kalau env var kosong, client otomatis pakai fallback icon app.
++exports.handler = async () => {
++  const headers = {
++    'Content-Type': 'application/json',
++    'Access-Control-Allow-Origin': '*',
++    'Cache-Control': 'public, max-age=300',
++  };
++  const url = (process.env.SPLASH_URL || '').trim();
++  return { statusCode: 200, headers, body: JSON.stringify({ url: url || null }) };
++};
+diff --git a/sw.js b/sw.js
+index 97f5e9c..60d2633 100644
+--- a/sw.js
++++ b/sw.js
+@@ -1,7 +1,7 @@
+-const CACHE = 'genshin-tracker-v10';
++const CACHE = 'genshin-tracker-v11';
+ const SHELL = [
+   '/', '/index.html', '/manifest.json',
+-  '/css/style.css', '/js/api.js', '/js/app.js', '/js/push.js',
++  '/css/style.css', '/js/api.js', '/js/app.js', '/js/push.js', '/js/splash.js',
+   '/icons/icon-192.png', '/icons/icon-512.png',
+ ];
+ 

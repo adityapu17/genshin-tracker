@@ -7,11 +7,13 @@ const RL_WINDOW_MS = 60_000;
 const RL_MAX = 5;
 
 const SITE_ID = "710a0832-00e6-424d-b61e-8addac859f2a";
-// Mode auto (kalau toggle Blobs site sudah aktif -> NETLIFY_BLOBS_CONTEXT di-inject platform).
-// Fallback manual dengan token site-scoped (hanya jalan jika token punya akses store).
+// Legacy V1 (Lambda-compat) handler: platform tidak men-inject token blob otomatis,
+// jadi pakai token situs dikonfigurasi lewat env secret NETLIFY_BLOBS_TOKEN (scope blobs:write).
+// Jika tidak tersedia, falls back ke konteks otomatis (hanya berfungsi bila fitur Blobs aktif).
 function blobsStore() {
-  if (process.env.NETLIFY_BLOBS_CONTEXT) return getStore("genshin-push");
-  return getStore({ name: "genshin-push", siteID: SITE_ID, token: process.env.NETLIFY_FUNCTIONS_TOKEN, context: "production" });
+  const token = process.env.NETLIFY_BLOBS_TOKEN;
+  if (token) return getStore({ name: "genshin-push", siteID: SITE_ID, token });
+  return getStore("genshin-push");
 }
 
 // Whitelist domain push service yang dikenal (Catatan @security-auditor #2).
@@ -25,7 +27,7 @@ const cors = {
 
 async function getSubscriptions() {
   try {
-    const d = await blobsStore().getJSON("subscriptions");
+    const d = await blobsStore().get("subscriptions", { type: "json" });
     return Array.isArray(d) ? d : [];
   } catch {
     return [];
@@ -36,7 +38,7 @@ async function getSubscriptions() {
 async function loadRateLimit() {
   let s;
   try {
-    s = await blobsStore().getJSON("ratelimit");
+    s = await blobsStore().get("ratelimit", { type: "json" });
   } catch {
     s = null;
   }

@@ -5,15 +5,16 @@ const webpush = (() => { try { return require("web-push"); } catch { return null
 const { getStore } = require("@netlify/blobs");
 
 const SITE_ID = "710a0832-00e6-424d-b61e-8addac859f2a";
-// Mode auto (kalau toggle Blobs site sudah aktif -> NETLIFY_BLOBS_CONTEXT di-inject platform).
+// Legacy V1 (Lambda-compat) handler: gunakan token situs (env secret NETLIFY_BLOBS_TOKEN, scope blobs:write).
 function blobsStore() {
-  if (process.env.NETLIFY_BLOBS_CONTEXT) return getStore("genshin-push");
-  return getStore({ name: "genshin-push", siteID: SITE_ID, token: process.env.NETLIFY_FUNCTIONS_TOKEN, context: "production" });
+  const token = process.env.NETLIFY_BLOBS_TOKEN;
+  if (token) return getStore({ name: "genshin-push", siteID: SITE_ID, token });
+  return getStore("genshin-push");
 }
 
 async function listSubs() {
   try {
-    const d = await blobsStore().getJSON("subscriptions");
+    const d = await blobsStore().get("subscriptions", { type: "json" });
     return Array.isArray(d) ? d : [];
   } catch (e) {
     console.error("subscriptions read error:", e && e.message);

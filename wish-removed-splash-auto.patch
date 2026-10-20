@@ -1,0 +1,625 @@
+From d790110c7b42a52d0caa4dae7a0333b0d8f204d1 Mon Sep 17 00:00:00 2001
+From: dit <dit@example.com>
+Date: Tue, 20 Oct 2026 08:43:26 +0000
+Subject: [PATCH] feat: hapus tab Wish; splash ambil gambar terbaru dari
+ HoYoLab + cache lokal
+
+---
+ index.html                  |   2 -
+ js/api.js                   |  18 -----
+ js/app.js                   | 153 ------------------------------------
+ js/splash.js                |  47 ++++++++---
+ netlify/functions/proxy.js  |  55 +------------
+ netlify/functions/splash.js |  75 ++++++++++++++++--
+ splash-3s.patch             | 133 -------------------------------
+ sw.js                       |   2 +-
+ 8 files changed, 106 insertions(+), 379 deletions(-)
+ delete mode 100644 splash-3s.patch
+
+diff --git a/index.html b/index.html
+index 02b1a1d..21dbf46 100644
+--- a/index.html
++++ b/index.html
+@@ -71,13 +71,11 @@
+   <main id="main-content">
+     <div id="tab-home" class="tab-panel"></div>
+     <div id="tab-characters" class="tab-panel hidden"></div>
+-    <div id="tab-wish" class="tab-panel hidden"></div>
+   </main>
+ 
+   <nav class="bottom-nav">
+     <button class="nav-btn active" data-tab="home">🏠<span>Home</span></button>
+     <button class="nav-btn" data-tab="characters">🧑‍🤝‍🧑<span>Karakter</span></button>
+-    <button class="nav-btn" data-tab="wish">🎁<span>Wish</span></button>
+   </nav>
+ </div>
+ 
+diff --git a/js/api.js b/js/api.js
+index 910536e..a28f5a4 100644
+--- a/js/api.js
++++ b/js/api.js
+@@ -26,22 +26,6 @@ async function callProxy(action, extra = {}) {
+   return json.data !== undefined ? json.data : json;
+ }
+ 
+-// Wish history TIDAK pakai cookie — pakai authkey yang diambil dari URL
+-// riwayat Wish di dalam game (dikirim via header x-authkey, tidak disimpan server).
+-async function callProxyWish({ authkey = '', ...extra } = {}) {
+-  const params = new URLSearchParams({ action: 'wish', server: Storage.server, ...extra });
+-  // authkey HANYA lewat header, jangan masuk query string (biar tidak ke-log di access log CDN/Netlify).
+-  const resp = await fetch(`${PROXY_URL}?${params.toString()}`, {
+-    headers: { 'x-authkey': authkey },
+-  });
+-  const json = await resp.json();
+-  if (json.error) throw new Error(json.error);
+-  if (json.retcode !== undefined && json.retcode !== 0) {
+-    throw new Error(`${json.message || 'Gagal'} (retcode ${json.retcode})`);
+-  }
+-  return json.data !== undefined ? json.data : json;
+-}
+-
+ const Api = {
+   getIndex: () => callProxy('index'),
+   getDailyNote: () => callProxy('dailynote'),
+@@ -51,6 +35,4 @@ const Api = {
+   getSignHome: () => callProxy('signHome'),
+   doSignIn: () => callProxy('signDo'),
+   redeemCode: (code) => callProxy('redeemCode', { cdkey: code }),
+-  getWish: ({ authkey, gacha_type, page = 1, size = 25, end_id = 0 }) =>
+-    callProxyWish({ authkey, gacha_type, page, size, end_id }),
+ };
+diff --git a/js/app.js b/js/app.js
+index bd80922..b00cb44 100644
+--- a/js/app.js
++++ b/js/app.js
+@@ -106,7 +106,6 @@ document.querySelectorAll('.nav-btn').forEach((btn) => {
+     document.querySelectorAll('.tab-panel').forEach((p) => p.classList.add('hidden'));
+     document.getElementById(`tab-${btn.dataset.tab}`).classList.remove('hidden');
+     if (btn.dataset.tab === 'characters') loadCharacters();
+-    if (btn.dataset.tab === 'wish') renderWishShell();
+   });
+ });
+ 
+@@ -396,156 +395,4 @@ document.getElementById('char-modal').addEventListener('click', (e) => {
+   if (e.target.id === 'char-modal') e.target.classList.add('hidden');
+ });
+ 
+-// ---------- Wish tab ----------
+-// Sumber data: endpoint gacha_info/api/getGachaLog milik HoYoLab yang dipakai
+-// halaman "Wish History" di dalam game. Butuh authkey yang cuma bisa didapat
+-// dari URL webview game (bukan cookie), jadi user paste URL-nya sekali per sesi.
+-const WISH_BANNERS = [
+-  { type: '301', label: 'Karakter Event (banner aktif)' },
+-  { type: '400', label: 'Karakter Event-2' },
+-  { type: '302', label: 'Senjata (Epitonic Invocation)' },
+-  { type: '200', label: 'Standar (Wanderlust Invocation)' },
+-  { type: '100', label: 'Pemula (Beginner)' },
+-];
+-const WISH_ITEM_TYPE = { 1: 'Karakter', 2: 'Senjata', 3: 'Material' };
+-const WISH_PAGES_PER_LOAD = 4;   // 4 x 25 = 100 tarikan per klik
+-const WISH_PAGE_SIZE = 25;       // proxy clamp maksimal 50
+-
+-let wishState = { list: [], endId: '0', more: true, loading: false, gachaType: '301' };
+-
+-// Terima URL lengkap getGachaLog / halaman wish, atau nilai authkey mentah.
+-function extractAuthkey(input) {
+-  const m = String(input || '').match(/[?&]authkey(?:_new)?=([^&#\s]+)/i);
+-  if (m) return decodeURIComponent(m[1]);
+-  return String(input || '').trim();
+-}
+-
+-function wishAuthkeyGet() { return sessionStorage.getItem('gt_wish_authkey') || ''; }
+-function wishAuthkeySet(v) { v ? sessionStorage.setItem('gt_wish_authkey', v) : sessionStorage.removeItem('gt_wish_authkey'); }
+-
+-function renderWishShell() {
+-  const el = document.getElementById('tab-wish');
+-  if (el.dataset.ready === '1') return; // shell dibuat sekali; hasil tetap bisa refresh
+-  el.dataset.ready = '1';
+-  el.innerHTML = `
+-    <div class="card">
+-      <div class="card-title">Riwayat Wish</div>
+-      <p class="muted" style="font-size:13px">Buka Wish → History <b>di dalam game</b>, lalu salin URL request
+-      <code>getGachaLog</code> (dari DevTools/mitm, atau URL halaman wish) dan tempel di sini.
+-      Authkey hanya dipakai per-request dan tidak disimpan di server maupun localStorage (hanya sessionStorage tab ini).</p>
+-      <textarea id="wish-url" rows="3" class="redeem-input" placeholder="Tempel URL riwayat wish / authkey di sini..."></textarea>
+-      <label class="muted" for="wish-banner" style="font-size:12px">Banner</label>
+-      <select id="wish-banner">
+-        ${WISH_BANNERS.map((b) => `<option value="${b.type}">${esc(b.label)}</option>`).join('')}
+-      </select>
+-      <div class="row" style="margin-top:8px;gap:8px">
+-        <button class="btn-primary" id="btn-wish-load" style="flex:1">Muat Riwayat</button>
+-        <button class="btn-secondary" id="btn-wish-more" style="flex:1">Muat Lebih Banyak</button>
+-      </div>
+-    </div>
+-    <div id="wish-results"></div>
+-  `;
+-  const saved = wishAuthkeyGet();
+-  if (saved) document.getElementById('wish-url').value = saved;
+-  document.getElementById('btn-wish-load').addEventListener('click', () => loadWish(true));
+-  document.getElementById('btn-wish-more').addEventListener('click', () => loadWish(false));
+-  document.getElementById('wish-banner').addEventListener('change', () => loadWish(true));
+-  if (saved) loadWish(true);
+-}
+-
+-async function loadWish(reset) {
+-  if (wishState.loading) return;
+-  const resultsEl = document.getElementById('wish-results');
+-  const bannerSel = document.getElementById('wish-banner');
+-  const gachaType = bannerSel ? bannerSel.value : wishState.gachaType;
+-
+-  if (reset) wishState = { list: [], endId: '0', more: true, loading: false, gachaType };
+-
+-  let authkey = extractAuthkey(document.getElementById('wish-url').value);
+-  if (!authkey) authkey = wishAuthkeyGet();
+-  if (!authkey) {
+-    resultsEl.innerHTML = '<div class="card"><p class="error">Tempel URL riwayat Wish atau authkey dulu.</p></div>';
+-    return;
+-  }
+-  wishAuthkeySet(authkey);
+-  if (!wishState.more) return;
+-
+-  wishState.loading = true;
+-  const btn = document.getElementById('btn-wish-load');
+-  if (btn) btn.disabled = true;
+-  resultsEl.innerHTML = '<div class="spinner">Memuat riwayat wish...</div>';
+-  try {
+-    let pages = 0;
+-    while (pages < WISH_PAGES_PER_LOAD && wishState.more) {
+-      const data = await Api.getWish({
+-        authkey,
+-        gacha_type: gachaType,
+-        page: 1,
+-        size: WISH_PAGE_SIZE,
+-        end_id: wishState.endId,
+-      });
+-      const list = data.list || [];
+-      if (!list.length) { wishState.more = false; break; }
+-      // API kirim terbaru dulu; end_id = id paling lama di halaman ini utk halaman berikutnya
+-      wishState.list = wishState.list.concat(list);
+-      wishState.endId = String(list[list.length - 1].id ?? '0');
+-      wishState.more = list.length >= WISH_PAGE_SIZE;
+-      pages++;
+-    }
+-    renderWish(resultsEl, wishState.list);
+-  } catch (e) {
+-    resultsEl.innerHTML = `<div class="card"><p class="error">Gagal memuat: ${esc(e.message)}</p>
+-      <p class="muted" style="font-size:12px">Authkey dari game cepat kedaluwarsa — kalau error -101/-1015, buka History di game lagi dan paste URL baru.</p></div>`;
+-    wishState.more = false;
+-  } finally {
+-    wishState.loading = false;
+-    wishState.gachaType = gachaType;
+-    if (btn) btn.disabled = false;
+-    renderWish(resultsEl, wishState.list);
+-  }
+-}
+-
+-function renderWish(el, list) {
+-  if (!el) return;
+-  if (!list.length) { el.innerHTML = ''; return; }
+-
+-  // list datang terbaru→terlama; pity = hitungan mundur dari yang terbaru
+-  const fiveTotal = list.filter((w) => String(w.rank_type) === '5').length;
+-  const fourTotal = list.filter((w) => String(w.rank_type) === '4').length;
+-  const idx5 = list.findIndex((w) => String(w.rank_type) === '5');
+-  const idx4 = list.findIndex((w) => String(w.rank_type) === '4');
+-  const pity5 = idx5 === -1 ? list.length : idx5;
+-  const pity4 = idx4 === -1 ? list.length : idx4;
+-
+-  el.innerHTML = `
+-    <div class="grid-2">
+-      <div class="mini-stat"><div class="label">Pity 5★ sekarang</div><div class="val r5">${pity5}</div></div>
+-      <div class="mini-stat"><div class="label">Pity 4★ sekarang</div><div class="val r4">${pity4}</div></div>
+-      <div class="mini-stat"><div class="label">Total 5★ termuat</div><div class="val r5">${fiveTotal}</div></div>
+-      <div class="mini-stat"><div class="label">Total 4★ termuat</div><div class="val r4">${fourTotal}</div></div>
+-    </div>
+-    <div class="card">
+-      <p class="muted" style="font-size:12px">Pity dihitung dari ${list.length} tarikan terakhir yang dimuat (bukan seluruh riwayat akun).</p>
+-      <div class="wish-table-wrap">
+-        <table class="wish-table">
+-          <thead><tr><th>Waktu</th><th>Item</th><th>Rarity</th><th>Tipe</th></tr></thead>
+-          <tbody>
+-            ${list.map((w) => {
+-              const r = String(w.rank_type || '');
+-              return `<tr class="r${esc(r)}">
+-                <td class="muted">${esc(w.time)}</td>
+-                <td>${esc(w.name)}</td>
+-                <td>${'★'.repeat(Number(r) || 0)}</td>
+-                <td class="muted">${esc(WISH_ITEM_TYPE[w.item_type] ?? '-')}</td>
+-              </tr>`;
+-            }).join('')}
+-          </tbody>
+-        </table>
+-      </div>
+-      <button class="btn-secondary" id="btn-wish-refresh" style="margin-top:10px">Refresh</button>
+-    </div>
+-  `;
+-  document.getElementById('btn-wish-refresh')?.addEventListener('click', () => loadWish(true));
+-}
+-
+ boot();
+diff --git a/js/splash.js b/js/splash.js
+index d550d2a..8d28afc 100644
+--- a/js/splash.js
++++ b/js/splash.js
+@@ -1,29 +1,50 @@
+-// Splash screen: gambar diambil dari endpoint server (/.netlify/functions/splash),
+-// yang membaca sumber splash HoYoLab. Kalau gagal, pakai icon app sebagai fallback.
++// Splash screen: gambar terakhir yang berhasil diambil disimpan di localStorage, jadi
++// app langsung menampilkan splash di pembukaan berikutnya, sambil mengecek gambar terbaru
++// dari /.netlify/functions/splash (yang mengikuti halaman HoYoLab). Kalau belum ada
++// cache dan fetch gagal/lambat, pakai icon app sebagai fallback.
+ const SPLASH_DURATION_MS = 3000;
+ const SPLASH_FALLBACK = 'icons/icon-512.png';
++const SPLASH_CACHE_KEY = 'gt_splash_url';
++const SPLASH_FETCH_TIMEOUT_MS = 2500;
+ 
+ const Splash = {
+-  async fetchImageUrl() {
++  cached() {
++    try { return localStorage.getItem(SPLASH_CACHE_KEY) || ''; } catch { return ''; }
++  },
++
++  async fetchLatest() {
++    const ctl = new AbortController();
++    const t = setTimeout(() => ctl.abort(), SPLASH_FETCH_TIMEOUT_MS);
+     try {
+-      const resp = await fetch('/.netlify/functions/splash', { cache: 'no-store' });
++      const resp = await fetch('/.netlify/functions/splash', { cache: 'no-store', signal: ctl.signal });
+       const json = await resp.json();
+-      return json.url || SPLASH_FALLBACK;
+-    } catch {
+-      return SPLASH_FALLBACK;
+-    }
++      if (json.url) {
++        try { localStorage.setItem(SPLASH_CACHE_KEY, json.url); } catch { /* storage penuh/diblok */ }
++        return json.url;
++      }
++    } catch { /* offline / timeout */ } finally { clearTimeout(t); }
++    return '';
+   },
+ 
+   run(durationMs) {
+     const el = document.getElementById('splash');
+     const img = document.getElementById('splash-img');
+     if (!el || !img) return Promise.resolve();
+-    const minWait = new Promise((r) => setTimeout(r, durationMs));
+-    const imgReady = this.fetchImageUrl().then((url) => {
+-      img.onerror = () => { img.onerror = null; img.src = SPLASH_FALLBACK; };
+-      img.src = url;
++
++    img.onerror = () => { img.onerror = null; img.src = SPLASH_FALLBACK; };
++    const cached = this.cached();
++    if (cached) img.src = cached;
++
++    // Ambil yang terbaru; kalau beda dari cache, tukar gambar saat itu juga.
++    const latest = this.fetchLatest().then((url) => {
++      if (url && url !== cached) img.src = url;
++      else if (!url && !cached) img.src = SPLASH_FALLBACK;
+     });
+-    return Promise.all([minWait, imgReady]).then(() => {
++
++    const minWait = new Promise((r) => setTimeout(r, durationMs));
++    // Tanpa cache, tunggu fetch (maks 2,5 dtk) supaya gambar tidak kosong; dengan cache tidak perlu nunggu.
++    const ready = cached ? Promise.resolve() : latest;
++    return Promise.all([minWait, ready]).then(() => {
+       el.classList.add('fade-out');
+       return new Promise((r) => setTimeout(() => { el.classList.add('hidden'); r(); }, 400));
+     });
+diff --git a/netlify/functions/proxy.js b/netlify/functions/proxy.js
+index e742907..8c78aa9 100644
+--- a/netlify/functions/proxy.js
++++ b/netlify/functions/proxy.js
+@@ -23,7 +23,7 @@ function buildHeaders() {
+ exports.handler = async (event) => {
+   const cors = {
+     'Access-Control-Allow-Origin': '*',
+-    'Access-Control-Allow-Headers': 'Content-Type, x-cookie, x-authkey',
++    'Access-Control-Allow-Headers': 'Content-Type, x-cookie',
+     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+   };
+   const noStore = { 'Cache-Control': 'no-store' };
+@@ -34,8 +34,7 @@ exports.handler = async (event) => {
+     const params = event.queryStringParameters || {};
+     const action = params.action;
+ 
+-    // 'wish' pakai authkey (bukan cookie) — sisanya wajib cookie.
+-    if (!cookie && action !== 'wish') {
++    if (!cookie) {
+       return { statusCode: 400, headers: cors, body: JSON.stringify({ error: 'Cookie belum diisi.' }) };
+     }
+ 
+@@ -93,56 +92,6 @@ exports.handler = async (event) => {
+         return { statusCode: 400, headers: cors, body: JSON.stringify({ error: 'Action tidak dikenal.' }) };
+     }
+ 
+-    // 'wish' pakai authkey, tidak pakai cookie/HoyoLab web headers yang sama.
+-    if (action === 'wish') {
+-      const authkey = (event.headers['x-authkey'] || event.headers['X-Authkey'] || '').trim();
+-      if (!authkey) {
+-        return { statusCode: 400, headers: cors, body: JSON.stringify({ error: 'Authkey belum diisi.' }) };
+-      }
+-      const region = params.server || '';
+-      const gachaType = parseInt(params.gacha_type, 10);
+-      const validTypes = [100, 200, 301, 302, 400];
+-      if (!validTypes.includes(gachaType) || Number.isNaN(gachaType)) {
+-        return { statusCode: 400, headers: cors, body: JSON.stringify({ error: 'gacha_type tidak valid.' }) };
+-      }
+-      const size = Math.min(50, Math.max(1, parseInt(params.size || '25', 10)));
+-      const page = Math.min(1000, Math.max(1, parseInt(params.page || '1', 10)));
+-      const endId = String(params.end_id ?? '0').replace(/[^\d]/g, '').slice(0, 20) || '0';
+-
+-      const q = new URLSearchParams({
+-        authkey_ver: '1', sign_type: '2', auth_appid: 'webview_gacha',
+-        init_type: String(gachaType), gacha_type: String(gachaType),
+-        lang: 'id', page: String(page), size: String(size), end_id: endId,
+-        region: region || 'os_asia', game_biz: 'hk4e_global', device_type: 'mobile',
+-      });
+-      // authkey dikirim masih ter-encode URL (apa adanya dari client), cukup encode ulang biar aman.
+-      q.set('authkey', encodeURIComponent(authkey));
+-      // host utama OS (SG/TW region) + fallback host lama.
+-      const hosts = [
+-        'https://public-operation-hk4e-sg.hoyoverse.com',
+-        'https://hk4e-api-os.hoyoverse.com',
+-      ];
+-      let data, raw;
+-      for (const host of hosts) {
+-        const attempt = `${host}/gacha_info/api/getGachaLog?${q.toString()}`;
+-        // authkey tidak pakai cookie web — pakai header HoyoLab mobile standar.
+-        const hkHeaders = { ...buildHeaders(), Origin: 'https://webstatic.hoyoverse.com', Referer: 'https://webstatic.hoyoverse.com/' };
+-        delete hkHeaders.Cookie;
+-        const resp = await fetch(attempt, { method, headers: hkHeaders });
+-        raw = await resp.text();
+-        try { data = JSON.parse(raw); } catch { data = null; }
+-        // retry ke host lain kalau WAF/block atau retcode tak valid.
+-        if (data && data.retcode !== undefined) {
+-          return { statusCode: 200, headers: { ...cors, ...noStore, 'Content-Type': 'application/json' }, body: JSON.stringify(data) };
+-        }
+-      }
+-      // tidak dapat JSON valid → terakhir sebagai error (tidak pernah expose authkey di sini).
+-      return {
+-        statusCode: 200, headers: { ...cors, ...noStore, 'Content-Type': 'application/json' },
+-        body: JSON.stringify({ error: `HoyoLab menolak request wish (bukan JSON). Coba buka History di game & paste URL kembali.`, raw: raw.slice(0, 200) }),
+-      };
+-    }
+-
+     const resp = await fetch(url, { method, headers: reqHeaders, body });
+     const raw = await resp.text();
+     let data;
+diff --git a/netlify/functions/splash.js b/netlify/functions/splash.js
+index 13d97db..c9db759 100644
+--- a/netlify/functions/splash.js
++++ b/netlify/functions/splash.js
+@@ -1,12 +1,75 @@
+-// Mengembalikan URL gambar splash. Sumber diatur lewat env var SPLASH_URL di Netlify
+-// (isi dengan URL gambar splash HoYoLab yang kamu temukan).
+-// Kalau env var kosong, client otomatis pakai fallback icon app.
++// Mengembalikan URL gambar splash yang mengikuti halaman HoYoLab Battle Chronicle.
++// Urutan: (1) env SPLASH_URL kalau diisi (override manual) -> (2) scrape halaman HoYoLab
++// (HTML + bundle JS/CSS-nya) cari gambar yang namanya mirip splash/launch/loading/cover.
++// Hasil di-cache di memori fungsi 1 jam + header CDN, jadi tiap ada update di HoYoLab
++// gambar ikut berganti tanpa deploy ulang. Client menerima {url, source} atau {url:null}.
++const PAGE = 'https://act.hoyolab.com/app/community-game-records-sea/index.html';
++const UA = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36';
++const IMG_RE = /(?:https?:)?\/\/[^"'\s)\\<>]+?\.(?:png|jpe?g|webp)(?:\?[^"'\s)\\<>]*)?/gi;
++const HINT_RE = /splash|launch|loading|startup|start[-_]?page|open[-_]?screen|cover|poster|key[-_]?visual|kv/i;
++const TTL_MS = 60 * 60 * 1000;
++const MAX_ASSETS = 10;
++
++let cache = { at: 0, url: null };
++
++async function get(url) {
++  const ctl = new AbortController();
++  const t = setTimeout(() => ctl.abort(), 6000);
++  try {
++    const r = await fetch(url, { headers: { 'User-Agent': UA, Accept: '*/*' }, signal: ctl.signal });
++    if (!r.ok) return '';
++    return await r.text();
++  } catch { return ''; } finally { clearTimeout(t); }
++}
++
++function abs(u, base) {
++  try { return new URL(u.startsWith('//') ? 'https:' + u : u, base).href; } catch { return null; }
++}
++
++async function scrape() {
++  const html = await get(PAGE);
++  if (!html) return null;
++
++  const assets = [];
++  for (const m of html.matchAll(/(?:src|href)=["']([^"']+\.(?:js|css)(?:\?[^"']*)?)["']/gi)) {
++    const u = abs(m[1], PAGE);
++    if (u && !assets.includes(u)) assets.push(u);
++  }
++  const bodies = [html];
++  const fetched = await Promise.all(assets.slice(0, MAX_ASSETS).map(get));
++  bodies.push(...fetched);
++
++  const seen = new Set();
++  const hinted = [];
++  const other = [];
++  for (const body of bodies) {
++    for (const m of body.matchAll(IMG_RE)) {
++      const u = abs(m[0], PAGE);
++      if (!u || seen.has(u)) continue;
++      seen.add(u);
++      const name = u.split('?')[0].split('/').pop();
++      if (/icon|logo|avatar|emoji|sprite|favicon/i.test(name)) continue;
++      (HINT_RE.test(name) ? hinted : other).push(u);
++    }
++  }
++  return hinted[0] || null; // sengaja TIDAK menebak gambar acak kalau tidak ada petunjuk nama
++}
++
+ exports.handler = async () => {
+   const headers = {
+     'Content-Type': 'application/json',
+     'Access-Control-Allow-Origin': '*',
+-    'Cache-Control': 'public, max-age=300',
++    'Cache-Control': 'public, max-age=300, s-maxage=3600',
+   };
+-  const url = (process.env.SPLASH_URL || '').trim();
+-  return { statusCode: 200, headers, body: JSON.stringify({ url: url || null }) };
++  const manual = (process.env.SPLASH_URL || '').trim();
++  if (manual) return { statusCode: 200, headers, body: JSON.stringify({ url: manual, source: 'env' }) };
++
++  if (cache.url && Date.now() - cache.at < TTL_MS) {
++    return { statusCode: 200, headers, body: JSON.stringify({ url: cache.url, source: 'cache' }) };
++  }
++  let url = null;
++  try { url = await scrape(); } catch { /* jatuh ke fallback client */ }
++  if (url) cache = { at: Date.now(), url };
++  else if (cache.url) url = cache.url; // scrape gagal -> pakai yang terakhir berhasil
++  return { statusCode: 200, headers, body: JSON.stringify({ url, source: url ? 'hoyolab' : null }) };
+ };
+diff --git a/splash-3s.patch b/splash-3s.patch
+deleted file mode 100644
+index db4a6a1..0000000
+--- a/splash-3s.patch
++++ /dev/null
+@@ -1,133 +0,0 @@
+-diff --git a/css/style.css b/css/style.css
+-index 2f4371b..c13600b 100644
+---- a/css/style.css
+-+++ b/css/style.css
+-@@ -135,3 +135,12 @@ body {
+- }
+- .spinner { text-align: center; padding: 30px; color: var(--muted); }
+- 
+-+
+-+/* Splash (ditampilkan 3 detik saat app dibuka) */
+-+.splash {
+-+  position: fixed; inset: 0; z-index: 1000; background: var(--bg);
+-+  display: flex; align-items: center; justify-content: center;
+-+  transition: opacity .4s ease;
+-+}
+-+.splash.fade-out { opacity: 0; pointer-events: none; }
+-+.splash img { max-width: 100%; max-height: 100%; object-fit: cover; width: 100%; height: 100%; }
+-diff --git a/index.html b/index.html
+-index b8a3382..02b1a1d 100644
+---- a/index.html
+-+++ b/index.html
+-@@ -17,6 +17,10 @@
+- </head>
+- <body>
+- 
+-+<div id="splash" class="splash">
+-+  <img id="splash-img" alt="">
+-+</div>
+-+
+- <div id="setup-screen" class="screen hidden">
+-   <div class="setup-card">
+-     <h1>Genshin Tracker</h1>
+-@@ -83,6 +87,7 @@
+- 
+- <div id="toast" class="toast hidden"></div>
+- 
+-+<script src="js/splash.js"></script>
+- <script src="js/api.js"></script>
+- <script src="js/app.js"></script>
+- </body>
+-diff --git a/js/app.js b/js/app.js
+-index 0932628..bd80922 100644
+---- a/js/app.js
+-+++ b/js/app.js
+-@@ -34,11 +34,14 @@ function fmtTime(seconds) {
+- 
+- // ---------- Boot ----------
+- function boot() {
+--  if (Storage.cookie && Storage.roleId) {
+--    showApp();
+--  } else {
+--    showSetup();
+--  }
+-+  // Splash dulu (3 detik), baru tampilkan setup/app.
+-+  Splash.run(SPLASH_DURATION_MS).then(() => {
+-+    if (Storage.cookie && Storage.roleId) {
+-+      showApp();
+-+    } else {
+-+      showSetup();
+-+    }
+-+  });
+-   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+- }
+- 
+-diff --git a/js/splash.js b/js/splash.js
+-new file mode 100644
+-index 0000000..d550d2a
+---- /dev/null
+-+++ b/js/splash.js
+-@@ -0,0 +1,31 @@
+-+// Splash screen: gambar diambil dari endpoint server (/.netlify/functions/splash),
+-+// yang membaca sumber splash HoYoLab. Kalau gagal, pakai icon app sebagai fallback.
+-+const SPLASH_DURATION_MS = 3000;
+-+const SPLASH_FALLBACK = 'icons/icon-512.png';
+-+
+-+const Splash = {
+-+  async fetchImageUrl() {
+-+    try {
+-+      const resp = await fetch('/.netlify/functions/splash', { cache: 'no-store' });
+-+      const json = await resp.json();
+-+      return json.url || SPLASH_FALLBACK;
+-+    } catch {
+-+      return SPLASH_FALLBACK;
+-+    }
+-+  },
+-+
+-+  run(durationMs) {
+-+    const el = document.getElementById('splash');
+-+    const img = document.getElementById('splash-img');
+-+    if (!el || !img) return Promise.resolve();
+-+    const minWait = new Promise((r) => setTimeout(r, durationMs));
+-+    const imgReady = this.fetchImageUrl().then((url) => {
+-+      img.onerror = () => { img.onerror = null; img.src = SPLASH_FALLBACK; };
+-+      img.src = url;
+-+    });
+-+    return Promise.all([minWait, imgReady]).then(() => {
+-+      el.classList.add('fade-out');
+-+      return new Promise((r) => setTimeout(() => { el.classList.add('hidden'); r(); }, 400));
+-+    });
+-+  },
+-+};
+-diff --git a/netlify/functions/splash.js b/netlify/functions/splash.js
+-new file mode 100644
+-index 0000000..13d97db
+---- /dev/null
+-+++ b/netlify/functions/splash.js
+-@@ -0,0 +1,12 @@
+-+// Mengembalikan URL gambar splash. Sumber diatur lewat env var SPLASH_URL di Netlify
+-+// (isi dengan URL gambar splash HoYoLab yang kamu temukan).
+-+// Kalau env var kosong, client otomatis pakai fallback icon app.
+-+exports.handler = async () => {
+-+  const headers = {
+-+    'Content-Type': 'application/json',
+-+    'Access-Control-Allow-Origin': '*',
+-+    'Cache-Control': 'public, max-age=300',
+-+  };
+-+  const url = (process.env.SPLASH_URL || '').trim();
+-+  return { statusCode: 200, headers, body: JSON.stringify({ url: url || null }) };
+-+};
+-diff --git a/sw.js b/sw.js
+-index 97f5e9c..60d2633 100644
+---- a/sw.js
+-+++ b/sw.js
+-@@ -1,7 +1,7 @@
+--const CACHE = 'genshin-tracker-v10';
+-+const CACHE = 'genshin-tracker-v11';
+- const SHELL = [
+-   '/', '/index.html', '/manifest.json',
+--  '/css/style.css', '/js/api.js', '/js/app.js', '/js/push.js',
+-+  '/css/style.css', '/js/api.js', '/js/app.js', '/js/push.js', '/js/splash.js',
+-   '/icons/icon-192.png', '/icons/icon-512.png',
+- ];
+- 
+diff --git a/sw.js b/sw.js
+index 60d2633..a202026 100644
+--- a/sw.js
++++ b/sw.js
+@@ -1,4 +1,4 @@
+-const CACHE = 'genshin-tracker-v11';
++const CACHE = 'genshin-tracker-v12';
+ const SHELL = [
+   '/', '/index.html', '/manifest.json',
+   '/css/style.css', '/js/api.js', '/js/app.js', '/js/push.js', '/js/splash.js',
+-- 
+2.43.0
+

@@ -23,7 +23,7 @@ function buildHeaders() {
 exports.handler = async (event) => {
   const cors = {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type, x-cookie, x-authkey',
+    'Access-Control-Allow-Headers': 'Content-Type, x-cookie',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   };
   const noStore = { 'Cache-Control': 'no-store' };
@@ -34,8 +34,7 @@ exports.handler = async (event) => {
     const params = event.queryStringParameters || {};
     const action = params.action;
 
-    // 'wish' pakai authkey (bukan cookie) — sisanya wajib cookie.
-    if (!cookie && action !== 'wish') {
+    if (!cookie) {
       return { statusCode: 400, headers: cors, body: JSON.stringify({ error: 'Cookie belum diisi.' }) };
     }
 
@@ -91,56 +90,6 @@ exports.handler = async (event) => {
       }
       default:
         return { statusCode: 400, headers: cors, body: JSON.stringify({ error: 'Action tidak dikenal.' }) };
-    }
-
-    // 'wish' pakai authkey, tidak pakai cookie/HoyoLab web headers yang sama.
-    if (action === 'wish') {
-      const authkey = (event.headers['x-authkey'] || event.headers['X-Authkey'] || '').trim();
-      if (!authkey) {
-        return { statusCode: 400, headers: cors, body: JSON.stringify({ error: 'Authkey belum diisi.' }) };
-      }
-      const region = params.server || '';
-      const gachaType = parseInt(params.gacha_type, 10);
-      const validTypes = [100, 200, 301, 302, 400];
-      if (!validTypes.includes(gachaType) || Number.isNaN(gachaType)) {
-        return { statusCode: 400, headers: cors, body: JSON.stringify({ error: 'gacha_type tidak valid.' }) };
-      }
-      const size = Math.min(50, Math.max(1, parseInt(params.size || '25', 10)));
-      const page = Math.min(1000, Math.max(1, parseInt(params.page || '1', 10)));
-      const endId = String(params.end_id ?? '0').replace(/[^\d]/g, '').slice(0, 20) || '0';
-
-      const q = new URLSearchParams({
-        authkey_ver: '1', sign_type: '2', auth_appid: 'webview_gacha',
-        init_type: String(gachaType), gacha_type: String(gachaType),
-        lang: 'id', page: String(page), size: String(size), end_id: endId,
-        region: region || 'os_asia', game_biz: 'hk4e_global', device_type: 'mobile',
-      });
-      // authkey dikirim masih ter-encode URL (apa adanya dari client), cukup encode ulang biar aman.
-      q.set('authkey', encodeURIComponent(authkey));
-      // host utama OS (SG/TW region) + fallback host lama.
-      const hosts = [
-        'https://public-operation-hk4e-sg.hoyoverse.com',
-        'https://hk4e-api-os.hoyoverse.com',
-      ];
-      let data, raw;
-      for (const host of hosts) {
-        const attempt = `${host}/gacha_info/api/getGachaLog?${q.toString()}`;
-        // authkey tidak pakai cookie web — pakai header HoyoLab mobile standar.
-        const hkHeaders = { ...buildHeaders(), Origin: 'https://webstatic.hoyoverse.com', Referer: 'https://webstatic.hoyoverse.com/' };
-        delete hkHeaders.Cookie;
-        const resp = await fetch(attempt, { method, headers: hkHeaders });
-        raw = await resp.text();
-        try { data = JSON.parse(raw); } catch { data = null; }
-        // retry ke host lain kalau WAF/block atau retcode tak valid.
-        if (data && data.retcode !== undefined) {
-          return { statusCode: 200, headers: { ...cors, ...noStore, 'Content-Type': 'application/json' }, body: JSON.stringify(data) };
-        }
-      }
-      // tidak dapat JSON valid → terakhir sebagai error (tidak pernah expose authkey di sini).
-      return {
-        statusCode: 200, headers: { ...cors, ...noStore, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: `HoyoLab menolak request wish (bukan JSON). Coba buka History di game & paste URL kembali.`, raw: raw.slice(0, 200) }),
-      };
     }
 
     const resp = await fetch(url, { method, headers: reqHeaders, body });

@@ -1,6 +1,6 @@
 // Splash screen: gambar terakhir yang berhasil diambil disimpan di localStorage, jadi
 // app langsung menampilkan splash di pembukaan berikutnya, sambil mengecek gambar terbaru
-// dari /.netlify/functions/splash (yang mengikuti halaman HoYoLab). Kalau belum ada
+// dari /api/splash (yang mengikuti halaman HoYoLab). Kalau belum ada
 // cache dan fetch gagal/lambat, pakai icon app sebagai fallback.
 const SPLASH_DURATION_MS = 3000;
 const SPLASH_FALLBACK = 'icons/icon-512.png';
@@ -16,7 +16,7 @@ const Splash = {
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), SPLASH_FETCH_TIMEOUT_MS);
     try {
-      const resp = await fetch('/.netlify/functions/splash', { cache: 'no-store', signal: ctl.signal });
+      const resp = await fetch('/api/splash', { cache: 'no-store', signal: ctl.signal });
       const json = await resp.json();
       if (json.url) {
         try { localStorage.setItem(SPLASH_CACHE_KEY, json.url); } catch { /* storage penuh/diblok */ }

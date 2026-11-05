@@ -8,9 +8,9 @@ const Storage = {
   clear() { localStorage.removeItem('gt_cookie'); localStorage.removeItem('gt_role_id'); localStorage.removeItem('gt_server'); },
 };
 
-// Pakai Netlify Function di domain yang sama (same-origin), jadi nggak butuh CORS
-// dan nggak gantung ke Cloudflare Worker eksternal (hoyoassist.gabel.workers.dev).
-const PROXY_URL = '/.netlify/functions/proxy';
+// Pakai Cloudflare Pages Function di domain yang sama (same-origin), jadi nggak butuh CORS
+// dan nggak gantung ke Worker eksternal. Kode: functions/api/proxy.js
+const PROXY_URL = '/api/proxy';
 
 async function callProxy(action, extra = {}) {
   const params = new URLSearchParams({ action, role_id: Storage.roleId, server: Storage.server, ...extra });

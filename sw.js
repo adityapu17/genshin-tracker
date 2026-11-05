@@ -1,4 +1,4 @@
-const CACHE = 'genshin-tracker-v12';
+const CACHE = 'genshin-tracker-v13';
 const SHELL = [
   '/', '/index.html', '/manifest.json',
   '/css/style.css', '/js/api.js', '/js/app.js', '/js/push.js', '/js/splash.js',
@@ -19,11 +19,11 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
-// Only cache app shell (static assets). Never cache API calls (Cloudflare Worker / Netlify functions)
+// Only cache app shell (static assets). Never cache API calls (Cloudflare Pages Functions)
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (url.origin !== self.location.origin) return; // cross-origin (Cloudflare Worker) -> always network
-  if (url.pathname.startsWith('/.netlify/functions/')) return; // always network
+  if (url.pathname.startsWith('/api/')) return; // always network
   e.respondWith(
     caches.match(e.request).then((cached) => cached || fetch(e.request))
   );

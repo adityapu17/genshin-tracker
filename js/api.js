@@ -26,8 +26,26 @@ async function callProxy(action, extra = {}) {
   return json.data !== undefined ? json.data : json;
 }
 
+// Cache ringan 60 detik untuk index (dipakai Home, Endgame, Farming, Karakter) supaya nggak spam HoyoLab.
+let _indexCache = { at: 0, data: null, promise: null };
+function getIndexCached() {
+  const now = Date.now();
+  if (_indexCache.data && now - _indexCache.at < 60000) return Promise.resolve(_indexCache.data);
+  if (_indexCache.promise) return _indexCache.promise;
+  _indexCache.promise = callProxy('index')
+    .then((d) => { _indexCache = { at: Date.now(), data: d, promise: null }; return d; })
+    .catch((e) => { _indexCache.promise = null; throw e; });
+  return _indexCache.promise;
+}
+
+function resetIndexCache() { _indexCache = { at: 0, data: null, promise: null }; }
+
 const Api = {
   getIndex: () => callProxy('index'),
+  getIndexCached,
+  detectRoles: () => callProxy('gameRoles'),
+  getSpiralAbyss: (previous = false) => callProxy('spiralAbyss', { schedule_type: previous ? '2' : '1' }),
+  getDiary: (month = 0) => callProxy('diary', { month: String(month) }),
   getDailyNote: () => callProxy('dailynote'),
   getCharacters: () => callProxy('characters'),
   getCharacterDetail: (ids) => callProxy('characterDetail', { character_ids: JSON.stringify(ids) }),

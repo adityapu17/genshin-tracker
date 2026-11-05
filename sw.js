@@ -1,8 +1,9 @@
-const CACHE = 'genshin-tracker-v14';
+const CACHE = 'genshin-tracker-v15';
 const SHELL = [
   '/', '/index.html', '/manifest.json',
-  '/css/style.css', '/js/api.js', '/js/app.js', '/js/push.js', '/js/splash.js',
+  '/css/style.css', '/js/api.js', '/js/features.js', '/js/app.js', '/js/push.js', '/js/splash.js',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/splash.webp',
+  '/data/farming.json', '/data/resets.json',
 ];
 
 self.addEventListener('install', (e) => {
@@ -30,7 +31,7 @@ self.addEventListener('fetch', (e) => {
 });
 
 // ---- Push (remote-triggered notifications) ----
-// Payload yang dikirim send-push.js: { title, body, icon, data: { url } }
+// Payload push remote: { title, body, icon, data: { url } }
 self.addEventListener('push', (e) => {
   let payload = {};
   try { payload = JSON.parse(e.data?.text?.() ?? '{}'); } catch { /* notifikasi tanpa data */ }

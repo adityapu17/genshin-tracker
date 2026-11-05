@@ -1,0 +1,12 @@
+{
+  "_catatan": "Semua jam = waktu server (Asia/TW-HK-MO UTC+8, Europe UTC+1, America UTC-5). Dicek terhadap timeline event pihak ketiga (genshin-builds.com/timeline) per 2026-11-05. Kalau HoYoverse ngubah siklus, cukup edit file ini, tanpa ubah kode. Setelah edit, naikkan nomor versi CACHE di sw.js (mis. v15 -> v16) supaya PWA yang sudah terpasang ikut ter-update.",
+  "dailyHour": 4,
+  "weeklyDay": 1,
+  "abyss": { "day": 16, "hour": 4 },
+  "theater": { "day": 1, "hour": 4 },
+  "stygian": {
+    "anchorLocal": "2026-09-30T10:00",
+    "periodDays": 42,
+    "openHours": 810
+  }
+}

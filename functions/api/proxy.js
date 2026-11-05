@@ -34,6 +34,62 @@ function json(status, obj, extra = {}) {
   });
 }
 
+function cookieVal(cookie, name) {
+  const m = cookie.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]*)'));
+  return m ? m[1] : '';
+}
+
+async function getJson(url, headers) {
+  const r = await fetch(url, { headers });
+  const t = await r.text();
+  try {
+    return JSON.parse(t);
+  } catch {
+    return { retcode: -1, message: `HoyoLab menolak request (status ${r.status})` };
+  }
+}
+
+// Deteksi UID Genshin dari cookie, jadi user nggak perlu ngetik UID.
+// 1) getGameRecordCard (pakai ltuid dari cookie) -> daftar game + game_role_id + region
+// 2) fallback: getUserGameRolesByCookie
+async function handleGameRoles(cookie, headers) {
+  const roles = [];
+  const errors = [];
+  const hid = cookieVal(cookie, 'ltuid_v2') || cookieVal(cookie, 'ltuid')
+    || cookieVal(cookie, 'account_id_v2') || cookieVal(cookie, 'account_id');
+
+  if (hid) {
+    const j = await getJson(`https://bbs-api-os.hoyolab.com/game_record/card/wapi/getGameRecordCard?uid=${encodeURIComponent(hid)}`, headers);
+    if (j.retcode === 0 && Array.isArray(j.data && j.data.list)) {
+      for (const g of j.data.list) {
+        if (Number(g.game_id) === 2 && g.game_role_id) {
+          roles.push({ uid: String(g.game_role_id), region: g.region, nickname: g.nickname, level: g.level });
+        }
+      }
+    } else {
+      errors.push(`card: ${j.message || j.retcode}`);
+    }
+  } else {
+    errors.push('ltuid tidak ada di cookie');
+  }
+
+  if (!roles.length) {
+    const j = await getJson('https://api-os-takumi.mihoyo.com/binding/api/getUserGameRolesByCookie?game_biz=hk4e_global', headers);
+    if (j.retcode === 0 && Array.isArray(j.data && j.data.list)) {
+      for (const g of j.data.list) {
+        roles.push({ uid: String(g.game_uid), region: g.region, nickname: g.nickname, level: g.level });
+      }
+    } else {
+      errors.push(`binding: ${j.message || j.retcode}`);
+    }
+  }
+
+  if (!roles.length) {
+    return json(200, { error: 'UID tidak bisa dideteksi otomatis (' + errors.join('; ') + '). Isi UID manual.' }, { 'Cache-Control': 'no-store' });
+  }
+  return json(200, { retcode: 0, data: { roles } }, { 'Cache-Control': 'no-store' });
+}
+
 export async function onRequest({ request }) {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
 
@@ -47,6 +103,8 @@ export async function onRequest({ request }) {
 
     const headers = { ...buildHeaders(), Cookie: cookie };
     let url, method = 'GET', body;
+
+    if (action === 'gameRoles') return await handleGameRoles(cookie, headers);
 
     switch (action) {
       case 'index': // profil ringkas (level AR, achievement, spiral abyss dsb)
@@ -80,6 +138,23 @@ export async function onRequest({ request }) {
         method = 'POST';
         body = JSON.stringify({ act_id: ACT_ID, region: params.server, uid: params.role_id });
         break;
+      case 'spiralAbyss': { // detail Spiral Abyss: schedule_type 1 = periode ini, 2 = periode sebelumnya
+        const st = params.schedule_type === '2' ? '2' : '1';
+        url = `${BASE_RECORD}/spiralAbyss?role_id=${params.role_id}&server=${params.server}&schedule_type=${st}`;
+        break;
+      }
+      case 'diary': { // Traveler's Diary: primogem + mora per bulan (month=0 bulan ini, 1/2 = bulan lalu)
+        const q = new URLSearchParams({
+          month: params.month || '0',
+          uid: params.role_id,
+          region: params.server,
+          bind_uid: params.role_id,
+          bind_region: params.server,
+          lang: 'en-us',
+        });
+        url = `https://hk4e-api-os.hoyolab.com/event/ysledgeros/month_info?${q.toString()}`;
+        break;
+      }
       case 'redeemCode': { // redeem kode giveaway (primogem code dsb)
         if (!params.cdkey) return json(400, { error: 'Kode belum diisi.' });
         const q = new URLSearchParams({

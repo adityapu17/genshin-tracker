@@ -56,8 +56,8 @@ function showSetup() {
 function showApp() {
   document.getElementById('setup-screen').classList.add('hidden');
   document.getElementById('app-screen').classList.remove('hidden');
+  startTicker();
   loadHome();
-  if (typeof window.initPush === 'function') window.initPush();
 }
 
 document.getElementById('btn-connect').addEventListener('click', async () => {
@@ -67,20 +67,34 @@ document.getElementById('btn-connect').addEventListener('click', async () => {
   const errEl = document.getElementById('setup-error');
   errEl.classList.add('hidden');
 
-  if (!uid || !cookie) {
-    errEl.textContent = 'UID dan Cookie wajib diisi.';
+  if (!cookie) {
+    errEl.textContent = 'Cookie wajib diisi.';
     errEl.classList.remove('hidden');
     return;
   }
   Storage.server = server; Storage.roleId = uid; Storage.cookie = cookie;
+  resetIndexCache();
 
   const btn = document.getElementById('btn-connect');
   btn.disabled = true; btn.textContent = 'Menghubungkan...';
   try {
-    await Api.getIndex(); // test call
+    if (!uid) {
+      // UID kosong -> deteksi otomatis dari cookie
+      btn.textContent = 'Mendeteksi UID...';
+      const det = await Api.detectRoles();
+      const roles = (det && det.roles) || [];
+      const pick = roles.find((r) => r.region === server) || roles[0];
+      if (!pick) throw new Error('Akun Genshin tidak ditemukan di cookie ini. Isi UID manual.');
+      Storage.roleId = pick.uid;
+      if (SERVER_OFFSET_H[pick.region] !== undefined) Storage.server = pick.region;
+      document.getElementById('setup-uid').value = pick.uid;
+      document.getElementById('setup-server').value = Storage.server;
+      btn.textContent = 'Menghubungkan...';
+    }
+    await Api.getIndexCached(); // test call (hasilnya dipakai ulang oleh Home)
     showApp();
   } catch (e) {
-    errEl.textContent = 'Gagal konek: ' + e.message + '. Cek lagi cookie & UID kamu.';
+    errEl.textContent = 'Gagal konek: ' + e.message + (uid ? '. Cek lagi cookie & UID kamu.' : '');
     errEl.classList.remove('hidden');
     Storage.clear();
   } finally {
@@ -94,6 +108,8 @@ document.getElementById('btn-close-howto').addEventListener('click', () => docum
 document.getElementById('btn-settings').addEventListener('click', () => {
   if (confirm('Putus koneksi akun HoyoLab dari HP ini?')) {
     Storage.clear();
+    resetIndexCache();
+    charsLoaded = false;
     showSetup();
   }
 });
@@ -106,6 +122,8 @@ document.querySelectorAll('.nav-btn').forEach((btn) => {
     document.querySelectorAll('.tab-panel').forEach((p) => p.classList.add('hidden'));
     document.getElementById(`tab-${btn.dataset.tab}`).classList.remove('hidden');
     if (btn.dataset.tab === 'characters') loadCharacters();
+    if (btn.dataset.tab === 'endgame') loadEndgame();
+    if (btn.dataset.tab === 'farming') loadFarming();
   });
 });
 
@@ -116,7 +134,7 @@ async function loadHome() {
   try {
     const [note, index, signInfo, signHome] = await Promise.all([
       Api.getDailyNote(),
-      Api.getIndex(),
+      Api.getIndexCached(),
       Api.getSignInfo().catch(() => null),
       Api.getSignHome().catch(() => null),
     ]);
@@ -127,6 +145,7 @@ async function loadHome() {
 }
 
 function renderHome(el, note, index, signInfo, signHome) {
+  const fetchedAt = Date.now();
   const resinPct = Math.min(100, Math.round((note.current_resin / note.max_resin) * 100));
   const role = index.role || {};
   const stats = index.stats || {};
@@ -145,7 +164,7 @@ function renderHome(el, note, index, signInfo, signHome) {
     <div class="card">
       <div class="row">
         <div class="card-title">Resin</div>
-        <div class="muted">${esc(fmtTime(note.resin_recovery_time))}</div>
+        <div>${resinCountdownHtml(note, fetchedAt)}</div>
       </div>
       <div class="big-stat">${esc(note.current_resin)} <span class="muted" style="font-size:16px">/ ${esc(note.max_resin)}</span></div>
       <div class="progress-bar"><div class="progress-fill" style="width:${resinPct}%"></div></div>
@@ -170,6 +189,10 @@ function renderHome(el, note, index, signInfo, signHome) {
       </div>
     </div>
 
+    ${renderTimersCard(note, fetchedAt)}
+
+    <div id="reset-card"></div>
+
     <div class="card">
       <div class="card-title">Check-in Harian</div>
       <div class="row">
@@ -189,7 +212,7 @@ function renderHome(el, note, index, signInfo, signHome) {
       </button>
     </div>
 
-    <div class="card" id="push-card"></div>
+    <div id="diary-card"></div>
 
     <div class="card">
       <div class="card-title">Redeem Code</div>
@@ -212,8 +235,10 @@ function renderHome(el, note, index, signInfo, signHome) {
   wireImgFallback(el);
   document.getElementById('btn-checkin')?.addEventListener('click', doCheckin);
   document.getElementById('btn-redeem')?.addEventListener('click', doRedeem);
-  // push.js mengisi kartu notifikasi + mulai polling resin kalau tersedia
-  if (typeof window.renderPushCard === 'function') window.renderPushCard();
+
+  // Kartu async (jadwal reset & Traveler's Diary) diisi setelah halaman tampil
+  renderResetCard().then((h) => { const t = document.getElementById('reset-card'); if (t) t.innerHTML = h; });
+  renderDiaryCard().then((h) => { const t = document.getElementById('diary-card'); if (t) t.innerHTML = h; });
 }
 
 async function doCheckin() {
@@ -264,7 +289,7 @@ async function loadCharacters(force = false) {
   if (charsLoaded && !force) return;
   el.innerHTML = '<div class="spinner">Memuat karakter...</div>';
   try {
-    const data = await Api.getIndex();
+    const data = await Api.getIndexCached();
     renderCharacterGrid(el, data.avatars || data.list || []);
     charsLoaded = true;
   } catch (e) {
@@ -332,6 +357,8 @@ function renderCharacterDetail(el, c, propertyMap) {
   const weapon = c.weapon || {};
   const relics = c.relics || c.reliquaries || [];
   const stats = c.selected_properties || c.base_properties || [];
+  const cvs = relics.map((r) => relicCV(r, propertyMap));
+  const totalCV = Math.round(cvs.reduce((a, b) => a + b, 0) * 10) / 10;
   el.innerHTML = `
     <div class="detail-header">
       <img src="${esc(charIcon(base))}" alt="${esc(base.name)}" data-fallback-hide>
@@ -350,14 +377,14 @@ function renderCharacterDetail(el, c, propertyMap) {
       </div>
     </div>
 
-    <div class="section-label">Artefak</div>
+    <div class="section-label">Artefak${relics.length ? ` · CV total <span class="cv ${cvClass(totalCV / Math.max(relics.length, 1))}">${esc(totalCV)}</span>` : ''}</div>
     ${relics.length ? relics.map((r, i) => `
       <div class="equip-item-wrap">
         <div class="equip-item equip-clickable" data-relic-idx="${i}">
           <img src="${esc(r.icon ?? '')}" alt="" data-fallback-hide>
           <div style="flex:1">
             <div class="name">${esc(r.name ?? r.pos_name ?? '-')}</div>
-            <div class="sub">+${esc(r.level ?? 0)} · ★${esc(r.rarity ?? '-')} · ${esc(r.set?.name ?? '')}</div>
+            <div class="sub">+${esc(r.level ?? 0)} · ★${esc(r.rarity ?? '-')} · ${esc(r.set?.name ?? '')} · <span class="cv ${cvClass(cvs[i])}">CV ${esc(cvs[i])}</span></div>
           </div>
           <span class="chevron">▾</span>
         </div>

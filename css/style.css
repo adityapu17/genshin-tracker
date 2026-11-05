@@ -151,3 +151,27 @@ body {
   filter: blur(22px) brightness(.75);
 }
 .splash img { position: relative; max-width: 100%; max-height: 100%; object-fit: contain; width: 100%; height: auto; }
+
+
+/* ---- Fitur tambahan: timer, reset, endgame, farming, CV ---- */
+.cd { font-variant-numeric: tabular-nums; }
+.good { color: var(--good); }
+.warn { color: var(--accent2); }
+.stat-row span:last-child { text-align: right; }
+.seg { display: flex; background: var(--card2); border-radius: 8px; overflow: hidden; }
+.seg-btn { background: none; border: none; color: var(--muted); font-size: 12px; padding: 6px 10px; }
+.seg-btn.active { background: var(--accent); color: #0a0e1a; font-weight: 700; }
+.floor { background: var(--card2); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+.chamber { border-top: 1px solid #232c4a; margin-top: 8px; padding-top: 8px; }
+.stars { color: var(--accent2); font-size: 13px; font-weight: 700; }
+.avatars-row { display: flex; gap: 6px; margin-top: 6px; }
+.avatars-row img { width: 34px; height: 34px; border-radius: 8px; object-fit: cover; background: var(--card); }
+.farm-group { margin-bottom: 14px; }
+.farm-chars { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 8px; }
+.farm-char { text-align: center; font-size: 11px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.farm-char img { width: 100%; max-width: 56px; aspect-ratio: 1; border-radius: 10px; object-fit: cover; background: var(--card2); }
+.cv { font-weight: 700; }
+.cv-high { color: var(--good); }
+.cv-mid { color: var(--accent2); }
+.cv-low { color: var(--muted); }
+.nav-btn { min-width: 0; }

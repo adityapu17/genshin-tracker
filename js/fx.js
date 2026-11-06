@@ -59,33 +59,96 @@ function normElement(raw) {
   return Object.keys(ELEMENTS).find((k) => ELEMENTS[k].alias.some((a) => s.includes(a))) || null;
 }
 
-const BOLTS = [
-  ['10%', '0s', '3.4s'], ['38%', '1.1s', '4.1s'], ['64%', '2.2s', '3.7s'], ['86%', '.6s', '4.6s'],
-];
-const boltSvg = ([x, d, t]) => `<svg class="bolt" viewBox="0 0 30 100" preserveAspectRatio="none" style="left:${x};--d:${d};--t:${t}"><polygon points="18,0 4,52 15,52 8,100 27,38 16,38 24,0" fill="#efe0ff" stroke="#b57bff" stroke-width="2.5" stroke-opacity=".55"/></svg>`;
+// Spiral dua lengan untuk angin Anemo (dihitung sekali, dipakai semua pusaran)
+const SWIRL_PATH = (() => {
+  let d1 = '', d2 = '';
+  for (let k = 0; k <= 26; k++) {
+    const th = (k / 26) * Math.PI * 3, r = 3 + th * 4.2, x = r * Math.cos(th), y = r * Math.sin(th);
+    d1 += `${k ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`;
+    d2 += `${k ? 'L' : 'M'}${(-x).toFixed(1)} ${(-y).toFixed(1)}`;
+  }
+  return [d1, d2];
+})();
+const swirlSvg = (style) => `<svg class="p swirl" viewBox="-50 -50 100 100" style="${style}" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="${SWIRL_PATH[0]}" stroke="#8ff7de" stroke-width="3.2" stroke-opacity=".85"/><path d="${SWIRL_PATH[1]}" stroke="#d6fff4" stroke-width="2" stroke-opacity=".7"/></svg>`;
+
+// Jumlah partikel per elemen: [normal, HP low-end]
+const FX_COUNT = { pyro: [22, 12], cryo: [14, 8], hydro: [14, 8], dendro: [16, 9], geo: [14, 8], electro: [9, 5], anemo: [6, 3] };
 
 // Partikel pakai delay negatif supaya efek langsung "sedang berjalan" begitu modal terbuka.
 function elementFxHtml(key) {
   if (FX_REDUCED || !key) return '';
-  const n = FX_LOW_END ? 8 : 14;
+  const n = FX_COUNT[key][FX_LOW_END ? 1 : 0];
   let out = '';
   for (let i = 0; i < n; i++) {
     const x = rnd(3, 95), sw = rnd(-30, 30);
     let s, t;
     switch (key) {
-      case 'pyro':    s = rnd(9, 18);  t = rnd(2.2, 4);   break;
-      case 'cryo':    s = rnd(5, 12);  t = rnd(5, 9);     break;
-      case 'hydro':   s = rnd(8, 22);  t = rnd(4, 8);     break;
-      case 'dendro':  s = rnd(12, 20); t = rnd(6, 10);    break;
-      case 'geo':     s = rnd(8, 16);  t = rnd(4, 7);     break;
-      case 'electro': s = rnd(3, 5);   t = rnd(1.6, 3);   break;
-      default:        s = rnd(50, 130); t = rnd(2.5, 4.5); // anemo: s = panjang garis angin
+      case 'pyro':    s = rnd(2, 5.5);  t = rnd(2.4, 5);   break; // bara kecil
+      case 'cryo':    s = rnd(5, 12);   t = rnd(5, 9);     break;
+      case 'hydro':   s = rnd(8, 22);   t = rnd(4, 8);     break;
+      case 'dendro':  s = i % 2 ? rnd(3, 7) : rnd(12, 20); t = i % 2 ? rnd(5, 9) : rnd(6, 10); break;
+      case 'geo':     s = rnd(8, 16);   t = rnd(4, 7);     break;
+      case 'electro': s = rnd(3, 5);    t = rnd(1.6, 3);   break;
+      default:        s = rnd(60, 110); t = rnd(5, 9);     // anemo: pusaran
     }
     const d = -rnd(0, t);
     const glyph = key === 'cryo' && i % 3 === 0 ? '❄' : '';
-    const kind = (key === 'dendro' || key === 'geo') && i % 4 === 3 ? ' sp' : ''; // sp = percikan kecil
-    out += `<i class="p${glyph ? ' g' : ''}${kind}" style="--x:${x.toFixed(1)}%;--y:${rnd(4, 92).toFixed(0)}%;--s:${s.toFixed(1)}px;--t:${t.toFixed(2)}s;--d:${d.toFixed(2)}s;--sw:${sw.toFixed(0)}px;--rot:${rnd(120, 320).toFixed(0)}deg">${glyph}</i>`;
+    // sp: dendro = titik cahaya hijau (separuh partikel), geo = percikan emas kecil
+    const sp = (key === 'dendro' && i % 2) || (key === 'geo' && i % 4 === 3) ? ' sp' : '';
+    const style = `--x:${x.toFixed(1)}%;--y:${rnd(4, 92).toFixed(0)}%;--s:${s.toFixed(1)}px;--t:${t.toFixed(2)}s;--d:${d.toFixed(2)}s;--sw:${sw.toFixed(0)}px;--rise:${rnd(30, 66).toFixed(0)}vh;--rot:${rnd(360, 720).toFixed(0)}deg;--dy:${rnd(-70, 70).toFixed(0)}px`;
+    out += key === 'anemo' ? swirlSvg(style) : `<i class="p${glyph ? ' g' : ''}${sp}" style="${style}">${glyph}</i>`;
   }
-  if (key === 'electro') out += BOLTS.slice(0, FX_LOW_END ? 2 : 4).map(boltSvg).join('');
+  if (key === 'electro') out += '<svg class="arcs" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg>';
   return `<div class="fx-layer fx-${key}" aria-hidden="true">${out}</div>`;
+}
+
+// ---------- Listrik Electro: sambaran acak dari atas / samping / bawah ----------
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const arcPts = (x, y, dx, dy, len, steps) => {
+  const pts = [[x, y]], t = len / steps;
+  for (let i = 0; i < steps; i++) {
+    const j = rnd(-5, 5);
+    x += dx * t - dy * j; y += dy * t + dx * j;
+    pts.push([x, y]);
+  }
+  return pts;
+};
+const ptsToPath = (pts) => pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join('');
+
+function makeArc() {
+  const edge = Math.floor(rnd(0, 4));
+  let x, y, dx, dy;
+  if (edge === 0) { x = rnd(8, 92); y = 0; dx = 0; dy = 1; }          // dari atas
+  else if (edge === 1) { x = 100; y = rnd(8, 92); dx = -1; dy = 0; }  // dari kanan
+  else if (edge === 2) { x = rnd(8, 92); y = 100; dx = 0; dy = -1; }  // dari bawah
+  else { x = 0; y = rnd(8, 92); dx = 1; dy = 0; }                     // dari kiri
+  const len = rnd(16, 40), steps = Math.round(rnd(6, 10));
+  const main = arcPts(x, y, dx, dy, len, steps);
+  let d = ptsToPath(main);
+  // cabang kecil dari tengah sambaran
+  const b = main[Math.floor(steps / 2)], ang = rnd(0.6, 1) * (Math.random() < 0.5 ? -1 : 1);
+  const bdx = dx * Math.cos(ang) - dy * Math.sin(ang), bdy = dx * Math.sin(ang) + dy * Math.cos(ang);
+  d += ptsToPath(arcPts(b[0], b[1], bdx, bdy, len * 0.35, 3));
+  const g = document.createElementNS(SVG_NS, 'g');
+  g.setAttribute('class', 'arc');
+  ['o', 'i'].forEach((c) => {
+    const pth = document.createElementNS(SVG_NS, 'path');
+    pth.setAttribute('class', c);
+    pth.setAttribute('d', d);
+    g.appendChild(pth);
+  });
+  g.addEventListener('animationend', () => g.remove());
+  return g;
+}
+
+// Dipanggil setelah lapisan efek masuk DOM. Berhenti sendiri saat modal ditutup / diganti.
+function startElementFx(layer) {
+  if (!layer || !layer.classList.contains('fx-electro')) return;
+  const svg = layer.querySelector('.arcs');
+  const fire = () => {
+    if (!layer.isConnected || layer.offsetParent === null) return;
+    if (!document.hidden && svg.childElementCount < 3) svg.appendChild(makeArc());
+    setTimeout(fire, rnd(220, 850));
+  };
+  fire();
 }

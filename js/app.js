@@ -322,10 +322,25 @@ function renderCharacterGrid(el, chars) {
   });
 }
 
+// Modal detail karakter ikut riwayat browser: gesture/tombol back menutup modal (balik ke daftar karakter)
+// dan tidak keluar dari app.
+const charModal = document.getElementById('char-modal');
+let modalPushed = false;
+function showCharModal() {
+  charModal.classList.remove('hidden');
+  if (!modalPushed) { history.pushState({ charModal: 1 }, ''); modalPushed = true; }
+}
+function closeCharModal() {
+  if (modalPushed) history.back(); // popstate di bawah yang menyembunyikan modal
+  else charModal.classList.add('hidden');
+}
+window.addEventListener('popstate', () => { modalPushed = false; charModal.classList.add('hidden'); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !charModal.classList.contains('hidden')) closeCharModal(); });
+
 async function openCharacterDetail(id) {
-  const modal = document.getElementById('char-modal');
+  const modal = charModal;
   const content = document.getElementById('char-modal-content');
-  modal.classList.remove('hidden');
+  showCharModal();
   content.className = 'modal-content';
   content.innerHTML = '<div class="spinner">Memuat detail...</div>';
   try {
@@ -365,14 +380,20 @@ function renderCharacterDetail(el, c, propertyMap, fromIndex) {
   const elemKey = normElement(base.element) || normElement(fromIndex && fromIndex.element);
   const elemInfo = elemKey ? ELEMENTS[elemKey] : null;
   el.className = `modal-content has-detail${elemKey ? ` has-el el-${elemKey}` : ''}`;
+  // Gambar besar (base.image) seperti di HoyoLab; avatar kecil jadi cadangan kalau tidak ada / gagal dimuat
+  const icon = charIcon(base);
+  const art = [base.image, base.card_image, fromIndex && fromIndex.image, fromIndex && fromIndex.card_image]
+    .find((u) => typeof u === 'string' && u && u !== base.icon) || '';
   const weapon = c.weapon || {};
   const relics = c.relics || c.reliquaries || [];
   const stats = c.selected_properties || c.base_properties || [];
   const cvs = relics.map((r) => relicCV(r, propertyMap));
   const totalCV = Math.round(cvs.reduce((a, b) => a + b, 0) * 10) / 10;
-  el.innerHTML = `${elementFxHtml(elemKey)}<div class="detail-scroll">
-    <div class="detail-hero"><div class="detail-header">
-      <div class="avatar-wrap"><img src="${esc(charIcon(base))}" alt="${esc(base.name)}" data-fallback-hide></div>
+  el.innerHTML = `${elementFxHtml(elemKey)}<button class="detail-close" id="detail-close" aria-label="Tutup">✕</button><div class="detail-scroll">
+    <div class="detail-hero${art ? ' with-art' : ''}">
+      ${art ? `<div class="art-wrap"><img class="detail-art" src="${esc(art)}" alt="${esc(base.name)}" id="detail-art"></div>` : ''}
+      <div class="detail-header">
+      <div class="avatar-wrap"><img src="${esc(icon)}" alt="${esc(base.name)}" data-fallback-hide></div>
       <div>
         <div class="name">${esc(base.name)}</div>
         <div class="muted">Lv.${esc(base.level)} · C${esc(base.actived_constellation_num ?? 0)}</div>
@@ -414,6 +435,11 @@ function renderCharacterDetail(el, c, propertyMap, fromIndex) {
     </div>
   </div>`;
 
+  startElementFx(el.querySelector('.fx-layer'));
+  document.getElementById('detail-close').addEventListener('click', closeCharModal);
+  const artImg = document.getElementById('detail-art');
+  if (artImg) artImg.addEventListener('error', () => el.querySelector('.detail-hero').classList.add('art-failed'), { once: true });
+
   // gambar gagal load di detail → sembunyikan saja (bukan placeholder)
   el.querySelectorAll('img[data-fallback-hide]').forEach((img) => {
     img.addEventListener('error', () => { img.style.visibility = 'hidden'; }, { once: true });
@@ -429,8 +455,8 @@ function renderCharacterDetail(el, c, propertyMap, fromIndex) {
   });
 }
 
-document.getElementById('char-modal').addEventListener('click', (e) => {
-  if (e.target.id === 'char-modal') e.target.classList.add('hidden');
+charModal.addEventListener('click', (e) => {
+  if (e.target.id === 'char-modal') closeCharModal();
 });
 
 boot();

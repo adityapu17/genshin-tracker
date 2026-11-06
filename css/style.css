@@ -269,11 +269,19 @@ button:active:not(:disabled), .char-card:active, .equip-clickable:active { trans
 .fx-layer::before, .fx-layer::after { content: ''; position: absolute; left: 0; right: 0; pointer-events: none; }
 .fx-layer .p { position: absolute; opacity: 0; will-change: transform, opacity; left: var(--x); }
 
-/* Pyro: api menyala dari bawah + bara naik */
-.fx-pyro::after { bottom: 0; height: 34%; transform-origin: bottom; background: linear-gradient(to top, rgba(255, 90, 20, .5), rgba(255, 150, 40, .16) 55%, transparent); animation: flicker 1.3s ease-in-out infinite alternate; }
-.fx-pyro .p { bottom: -8%; width: var(--s); height: calc(var(--s) * 1.5); border-radius: 50% 50% 45% 45% / 65% 65% 35% 35%; background: radial-gradient(ellipse at 50% 75%, #fff3b0 0%, #ffb22e 35%, #ff5a14 62%, rgba(255, 60, 0, 0) 76%); animation: flameUp var(--t) ease-in var(--d) infinite; }
+/* Pyro: bara api kecil beterbangan + nyala di dasar */
+.fx-pyro::after { bottom: 0; height: 30%; transform-origin: bottom; background: linear-gradient(to top, rgba(255, 90, 20, .42), rgba(255, 150, 40, .12) 55%, transparent); animation: flicker 1.3s ease-in-out infinite alternate; }
+.fx-pyro .p { bottom: -3%; width: var(--s); height: var(--s); border-radius: 50%; background: radial-gradient(circle, #fff6c0 0%, #ffb030 45%, rgba(255, 90, 20, 0) 75%); box-shadow: 0 0 6px 1px rgba(255, 140, 30, .75); animation: emberUp var(--t) ease-out var(--d) infinite; }
 @keyframes flicker { from { opacity: .6; transform: scaleY(.9); } to { opacity: 1; transform: scaleY(1.1); } }
-@keyframes flameUp { 0% { transform: translate(0, 0) scale(1); opacity: 0; } 12% { opacity: .95; } 55% { transform: translate(var(--sw), -34vh) scale(.7); opacity: .8; } 100% { transform: translate(calc(var(--sw) * -.5), -62vh) scale(.2); opacity: 0; } }
+@keyframes emberUp {
+  0% { transform: translate(0, 0) scale(1); opacity: 0; }
+  8% { opacity: 1; }
+  28% { transform: translate(calc(var(--sw) * .9), calc(var(--rise) * -.28)) scale(.95); opacity: .6; }
+  40% { opacity: 1; }
+  58% { transform: translate(calc(var(--sw) * -.7), calc(var(--rise) * -.6)) scale(.8); opacity: .55; }
+  72% { opacity: .95; }
+  100% { transform: translate(calc(var(--sw) * .6), calc(var(--rise) * -1)) scale(.25); opacity: 0; }
+}
 
 /* Cryo: salju turun + embun beku di atas */
 .fx-cryo::before { top: 0; height: 24%; background: linear-gradient(to bottom, rgba(190, 232, 255, .3), transparent); animation: breathe 3.4s ease-in-out infinite; }
@@ -288,12 +296,12 @@ button:active:not(:disabled), .char-card:active, .equip-clickable:active { trans
 @keyframes waveX { to { transform: translateX(-50%); } }
 @keyframes bubbleUp { 0% { transform: translate(0, 0) scale(.6); opacity: 0; } 15% { opacity: .9; } 50% { transform: translate(var(--sw), -30vh) scale(1); } 100% { transform: translate(calc(var(--sw) * -1), -66vh) scale(1.1); opacity: 0; } }
 
-/* Dendro: daun berguguran + spora bercahaya */
-.fx-dendro::after { bottom: 0; height: 22%; transform-origin: bottom; background: linear-gradient(to top, rgba(110, 200, 70, .3), transparent); animation: flicker 2.6s ease-in-out infinite alternate; }
+/* Dendro: campuran daun jatuh dan titik cahaya hijau beterbangan */
+.fx-dendro::after { bottom: 0; height: 20%; transform-origin: bottom; background: linear-gradient(to top, rgba(110, 200, 70, .26), transparent); animation: flicker 2.6s ease-in-out infinite alternate; }
 .fx-dendro .p { top: -6%; width: var(--s); height: calc(var(--s) * .55); border-radius: 0 100% 0 100%; background: linear-gradient(135deg, #c4f57a, #55b43d 60%, #2f7d2a); animation: leafFall var(--t) linear var(--d) infinite; }
-.fx-dendro .p.sp { top: auto; bottom: -6%; width: 6px; height: 6px; border-radius: 50%; background: radial-gradient(circle, #f4ffb0, rgba(190, 255, 110, 0) 70%); animation: sporeUp var(--t) ease-out var(--d) infinite; }
+.fx-dendro .p.sp { top: var(--y); width: var(--s); height: var(--s); border-radius: 50%; background: radial-gradient(circle, #f4ffc0 0%, #9dff6a 45%, rgba(150, 255, 100, 0) 72%); box-shadow: 0 0 8px 2px rgba(150, 255, 105, .6); animation: moteFloat var(--t) ease-in-out var(--d) infinite; }
 @keyframes leafFall { 0% { transform: translate(0, 0) rotate(0); opacity: 0; } 10% { opacity: .95; } 25% { transform: translate(var(--sw), 22vh) rotate(90deg); } 50% { transform: translate(calc(var(--sw) * -1), 45vh) rotate(200deg); } 75% { transform: translate(var(--sw), 68vh) rotate(290deg); } 100% { transform: translate(0, 92vh) rotate(380deg); opacity: 0; } }
-@keyframes sporeUp { 0% { transform: translate(0, 0) scale(.5); opacity: 0; } 20% { opacity: .9; } 100% { transform: translate(var(--sw), -50vh) scale(1.2); opacity: 0; } }
+@keyframes moteFloat { 0% { transform: translate(0, 0) scale(.6); opacity: 0; } 15% { opacity: .95; } 35% { transform: translate(var(--sw), -7vh) scale(1); } 60% { transform: translate(calc(var(--sw) * -.8), -3vh); opacity: .45; } 80% { transform: translate(calc(var(--sw) * .6), -12vh); opacity: .95; } 100% { transform: translate(0, -18vh) scale(.6); opacity: 0; } }
 
 /* Geo: pecahan batu emas melayang naik */
 .fx-geo::after { bottom: 0; height: 28%; transform-origin: bottom; background: linear-gradient(to top, rgba(255, 196, 70, .38), transparent); animation: flicker 2.2s ease-in-out infinite alternate; }
@@ -303,16 +311,41 @@ button:active:not(:disabled), .char-card:active, .equip-clickable:active { trans
 .fx-geo .p.sp { width: 5px; height: 5px; clip-path: none; border-radius: 50%; background: radial-gradient(circle, #fff6c8, rgba(255, 220, 110, 0) 70%); }
 @keyframes rockUp { 0% { transform: translate(0, 0) rotate(0) scale(.5); opacity: 0; } 15% { opacity: .95; } 100% { transform: translate(var(--sw), -58vh) rotate(var(--rot)) scale(1); opacity: 0; } }
 
-/* Electro: petir menyambar + percikan listrik */
-.fx-electro::before { inset: 0; background: radial-gradient(circle at 50% 0, rgba(190, 140, 255, .3), transparent 62%); animation: zap 3.4s infinite; }
-.fx-electro .bolt { position: absolute; top: 0; width: 26px; height: 42%; opacity: 0; animation: zap var(--t) linear var(--d) infinite; }
-.fx-electro .p { bottom: 0; width: var(--s); height: var(--s); border-radius: 50%; background: #efe0ff; box-shadow: 0 0 6px 2px rgba(181, 123, 255, .8); animation: spark var(--t) ease-out var(--d) infinite; top: var(--y); bottom: auto; }
-@keyframes zap { 0%, 84%, 100% { opacity: 0; } 86% { opacity: 1; } 88% { opacity: .15; } 90% { opacity: .9; } 94% { opacity: 0; } }
+/* Electro: sambaran listrik acak dari atas / samping / bawah (digambar JS, lihat fx.js) */
+.fx-electro::before { inset: 0; background: radial-gradient(circle at 50% 0, rgba(190, 140, 255, .16), transparent 62%); animation: breathe 2.8s ease-in-out infinite; }
+.fx-electro .arcs { position: absolute; inset: 0; width: 100%; height: 100%; }
+.fx-electro .arc { opacity: 0; animation: arcFlash .5s linear forwards; }
+.fx-electro .arc path { fill: none; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.fx-electro .arc .o { stroke: #b57bff; stroke-width: 6; stroke-opacity: .35; }
+.fx-electro .arc .i { stroke: #f6eeff; stroke-width: 1.8; }
+.fx-electro .p { top: var(--y); width: var(--s); height: var(--s); border-radius: 50%; background: #efe0ff; box-shadow: 0 0 6px 2px rgba(181, 123, 255, .8); animation: spark var(--t) ease-out var(--d) infinite; }
+@keyframes arcFlash { 0% { opacity: 0; } 6% { opacity: 1; } 16% { opacity: .2; } 28% { opacity: 1; } 55% { opacity: .45; } 100% { opacity: 0; } }
 @keyframes spark { 0% { transform: translate(0, 0) scale(0); opacity: 0; } 12% { opacity: 1; transform: translate(0, 0) scale(1); } 35% { transform: translate(var(--sw), -6vh); } 60% { transform: translate(calc(var(--sw) * -.7), -12vh); } 100% { transform: translate(var(--sw), -22vh); opacity: 0; } }
 
-/* Anemo: semburan angin */
-.fx-anemo .p { left: -20%; top: var(--y); width: var(--s); height: 2px; border-radius: 2px; background: linear-gradient(90deg, transparent, rgba(120, 240, 205, .9), transparent); animation: windSweep var(--t) ease-in-out var(--d) infinite; }
-@keyframes windSweep { 0% { transform: translateX(0); opacity: 0; } 20% { opacity: 1; } 100% { transform: translateX(150vw); opacity: 0; } }
+/* Anemo: pusaran angin menggulung (spiral berputar sambil melaju) */
+.fx-anemo .p.swirl { left: -18%; top: var(--y); width: var(--s); height: var(--s); animation: swirlFly var(--t) linear var(--d) infinite; }
+@keyframes swirlFly {
+  0% { transform: translate(0, 0) rotate(0) scale(.6); opacity: 0; }
+  15% { opacity: .9; }
+  50% { transform: translate(65vw, var(--dy)) rotate(calc(var(--rot) * .5)) scale(1); }
+  85% { opacity: .9; }
+  100% { transform: translate(135vw, 0) rotate(var(--rot)) scale(.8); opacity: 0; }
+}
+
+/* ---- Detail karakter: gambar besar ala HoyoLab + tombol tutup ---- */
+.art-wrap { position: relative; margin: -20px -20px 0; background: radial-gradient(circle at 50% 62%, var(--el-soft, rgba(90, 163, 255, .2)), transparent 66%); animation: bob 4.5s ease-in-out infinite; }
+.art-wrap::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 42%; background: linear-gradient(to bottom, transparent, var(--card)); pointer-events: none; }
+.detail-art { display: block; width: 100%; height: min(80vw, 340px); object-fit: contain; object-position: 50% 100%; animation: artIn .55s cubic-bezier(.2, .8, .2, 1) backwards; }
+.detail-hero.with-art { background: none; padding-top: 0; }
+.with-art .avatar-wrap { display: none; }
+.with-art.art-failed .avatar-wrap { display: block; }
+.with-art.art-failed .art-wrap { display: none; }
+.detail-hero.with-art.art-failed { padding-top: 20px; }
+.with-art .detail-header { position: relative; z-index: 1; margin-top: -58px; }
+.with-art.art-failed .detail-header { margin-top: 0; }
+.with-art .detail-header .name { font-size: 24px; text-shadow: 0 2px 10px rgba(0, 0, 0, .65); }
+@keyframes artIn { from { opacity: 0; transform: scale(.9) translateY(12px); } }
+.modal-content .detail-close { position: absolute; top: 12px; right: 12px; z-index: 3; width: 36px; height: 36px; margin: 0; padding: 0; border-radius: 50%; font-size: 16px; line-height: 1; background: rgba(15, 20, 36, .6); color: var(--text); }
 
 /* Hormati pengaturan "kurangi gerakan" di HP */
 @media (prefers-reduced-motion: reduce) {

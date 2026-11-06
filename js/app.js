@@ -166,7 +166,7 @@ function renderHome(el, note, index, signInfo, signHome) {
         <div class="card-title">Resin</div>
         <div>${resinCountdownHtml(note, fetchedAt)}</div>
       </div>
-      <div class="big-stat">${esc(note.current_resin)} <span class="muted" style="font-size:16px">/ ${esc(note.max_resin)}</span></div>
+      <div class="big-stat"><b data-count="${esc(note.current_resin)}">${esc(note.current_resin)}</b> <span class="muted" style="font-size:16px">/ ${esc(note.max_resin)}</span></div>
       <div class="progress-bar"><div class="progress-fill" style="width:${resinPct}%"></div></div>
     </div>
 
@@ -228,17 +228,18 @@ function renderHome(el, note, index, signInfo, signHome) {
       <div class="stat-row"><span>Achievement</span><span>${esc(stats.achievement_number ?? '-')}</span></div>
       <div class="stat-row"><span>Spiral Abyss</span><span>${esc(stats.spiral_abyss ?? '-')}</span></div>
       <div class="stat-row"><span>Peti Terbuka</span><span>${esc(stats.way_point_number ?? '-')}</span></div>
-      <p class="muted" style="margin-top:10px">Catatan: Mora tidak tersedia lewat API publik HoyoLab, jadi tidak bisa ditampilkan real-time di sini.</p>
+      <p class="muted" style="margin-top:10px">Catatan: jumlah Mora yang kamu punya tidak tersedia lewat API HoyoLab. Pemasukan Mora per bulan ada di kartu Traveler's Diary.</p>
     </div>
   `;
 
   wireImgFallback(el);
+  animateCounts(el);
   document.getElementById('btn-checkin')?.addEventListener('click', doCheckin);
   document.getElementById('btn-redeem')?.addEventListener('click', doRedeem);
 
   // Kartu async (jadwal reset & Traveler's Diary) diisi setelah halaman tampil
   renderResetCard().then((h) => { const t = document.getElementById('reset-card'); if (t) t.innerHTML = h; });
-  renderDiaryCard().then((h) => { const t = document.getElementById('diary-card'); if (t) t.innerHTML = h; });
+  loadDiaryCard(document.getElementById('diary-card'));
 }
 
 async function doCheckin() {
@@ -247,6 +248,7 @@ async function doCheckin() {
   try {
     await Api.doSignIn();
     toast('Check-in berhasil! 🎉');
+    burst(btn);
     loadHome();
   } catch (e) {
     toast('Gagal check-in: ' + e.message);
@@ -273,6 +275,7 @@ async function doRedeem() {
     resultEl.textContent = `Kode "${code}" berhasil di-redeem! 🎉`;
     resultEl.className = 'muted';
     toast('Redeem berhasil! 🎉');
+    burst(btn);
     input.value = '';
   } catch (e) {
     resultEl.textContent = `Gagal redeem "${code}": ${e.message}`;
@@ -304,8 +307,8 @@ function charIcon(c) {
 }
 
 function renderCharacterGrid(el, chars) {
-  el.innerHTML = `<div class="char-grid">${chars.map((c) => `
-    <div class="char-card" data-id="${esc(c.id)}">
+  el.innerHTML = `<div class="char-grid">${chars.map((c, i) => `
+    <div class="char-card" data-id="${esc(c.id)}" style="--i:${Math.min(i, 14)}">
       <img src="${esc(charIcon(c))}" loading="lazy" alt="${esc(c.name)}" data-fallback>
       <div class="name">${esc(c.name)}</div>
       <div class="lv">Lv.${esc(c.level)}</div>
@@ -323,12 +326,17 @@ async function openCharacterDetail(id) {
   const modal = document.getElementById('char-modal');
   const content = document.getElementById('char-modal-content');
   modal.classList.remove('hidden');
+  content.className = 'modal-content';
   content.innerHTML = '<div class="spinner">Memuat detail...</div>';
   try {
-    const data = await Api.getCharacterDetail([id]);
-    const c = (data.list || data.avatars || [])[0];
-    renderCharacterDetail(content, c, data.property_map || {});
+    // Dari cache kalau sudah pernah diambil (mis. lewat tab Farming), jadi terbuka instan
+    const d = await Api.getDetails([id]);
+    const c = d.map[id];
+    let fromIndex = null;
+    try { fromIndex = ((await Api.getIndexCached()).avatars || []).find((a) => a.id === id) || null; } catch (e) { /* element cadangan saja */ }
+    renderCharacterDetail(content, c, d.props || {}, fromIndex);
   } catch (e) {
+    content.className = 'modal-content';
     content.innerHTML = `<p class="error">Gagal memuat detail: ${esc(e.message)}</p>`;
   }
 }
@@ -351,22 +359,26 @@ function statName(s, propertyMap, fallback) {
   return fromMap ?? s.info?.name ?? s.name ?? fallback;
 }
 
-function renderCharacterDetail(el, c, propertyMap) {
-  if (!c) { el.innerHTML = '<p class="error">Data tidak ditemukan.</p>'; return; }
+function renderCharacterDetail(el, c, propertyMap, fromIndex) {
+  if (!c) { el.className = 'modal-content'; el.innerHTML = '<p class="error">Data tidak ditemukan.</p>'; return; }
   const base = c.base || c;
+  const elemKey = normElement(base.element) || normElement(fromIndex && fromIndex.element);
+  const elemInfo = elemKey ? ELEMENTS[elemKey] : null;
+  el.className = `modal-content has-detail${elemKey ? ` has-el el-${elemKey}` : ''}`;
   const weapon = c.weapon || {};
   const relics = c.relics || c.reliquaries || [];
   const stats = c.selected_properties || c.base_properties || [];
   const cvs = relics.map((r) => relicCV(r, propertyMap));
   const totalCV = Math.round(cvs.reduce((a, b) => a + b, 0) * 10) / 10;
-  el.innerHTML = `
-    <div class="detail-header">
-      <img src="${esc(charIcon(base))}" alt="${esc(base.name)}" data-fallback-hide>
+  el.innerHTML = `${elementFxHtml(elemKey)}<div class="detail-scroll">
+    <div class="detail-hero"><div class="detail-header">
+      <div class="avatar-wrap"><img src="${esc(charIcon(base))}" alt="${esc(base.name)}" data-fallback-hide></div>
       <div>
         <div class="name">${esc(base.name)}</div>
         <div class="muted">Lv.${esc(base.level)} · C${esc(base.actived_constellation_num ?? 0)}</div>
+        ${elemInfo ? `<span class="el-chip">${elemInfo.icon} ${esc(elemInfo.label)}</span>` : ''}
       </div>
-    </div>
+    </div></div>
 
     <div class="section-label">Senjata</div>
     <div class="equip-item">
@@ -400,7 +412,7 @@ function renderCharacterDetail(el, c, propertyMap) {
       ${stats.length ? stats.map((s) => `<div class="stat-row"><span>${esc(statName(s, propertyMap, 'Stat'))}</span><span>${esc(statVal(s))}</span></div>`).join('')
         : '<p class="muted">Stat detail tidak tersedia dari API.</p>'}
     </div>
-  `;
+  </div>`;
 
   // gambar gagal load di detail → sembunyikan saja (bukan placeholder)
   el.querySelectorAll('img[data-fallback-hide]').forEach((img) => {
@@ -411,9 +423,8 @@ function renderCharacterDetail(el, c, propertyMap) {
     row.addEventListener('click', () => {
       const idx = row.dataset.relicIdx;
       const panel = document.getElementById(`relic-stats-${idx}`);
-      const chevron = row.querySelector('.chevron');
       panel.classList.toggle('hidden');
-      chevron.textContent = panel.classList.contains('hidden') ? '▾' : '▴';
+      row.classList.toggle('open', !panel.classList.contains('hidden'));
     });
   });
 }

@@ -1,7 +1,7 @@
-const CACHE = 'genshin-tracker-v15';
+const CACHE = 'genshin-tracker-v16';
 const SHELL = [
   '/', '/index.html', '/manifest.json',
-  '/css/style.css', '/js/api.js', '/js/features.js', '/js/app.js', '/js/push.js', '/js/splash.js',
+  '/css/style.css', '/js/api.js', '/js/fx.js', '/js/features.js', '/js/app.js', '/js/push.js', '/js/splash.js',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/splash.webp',
   '/data/farming.json', '/data/resets.json',
 ];

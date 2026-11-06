@@ -11,6 +11,7 @@ ke HP Android kayak app biasa.
 - ✅ Countdown reset (harian, mingguan, Spiral Abyss, Imaginarium Theater, Stygian) dalam waktu server
 - ✅ Tab Endgame: ringkasan Abyss/Theater/Stygian + detail Spiral Abyss (periode ini/sebelumnya, bintang, tim)
 - ✅ Tab Farming: domain talent book & material senjata yang buka hari ini, dicocokkan ke karakter kamu
+- ✅ Animasi interaksi + efek elemen per karakter (ringan, hormati pengaturan reduce-motion)
 - ✅ Traveler's Diary: primogem dan mora per bulan (tergantung API HoyoLab, bisa tidak tersedia)
 - ✅ Skor artefak (Crit Value = CRIT Rate × 2 + CRIT DMG) per artefak dan total di detail karakter
 - ✅ UID otomatis: kosongkan kolom UID, app mendeteksi dari cookie
@@ -26,6 +27,7 @@ ke HP Android kayak app biasa.
 - `functions/api/proxy.js` — Cloudflare Pages Function, route `/api/proxy`: nerusin request ke HoyoLab.
 - `functions/api/splash.js` — Pages Function, route `/api/splash` (saat ini tidak dipakai app).
 - `js/features.js` — timer, reset, Endgame, Farming, Diary, skor artefak.
+- `js/fx.js` — animasi ringan (hitung naik, ledakan partikel) dan efek elemen di detail karakter (Pyro api, Cryo salju, Hydro air, Dendro tanaman, Geo batu emas, Electro listrik, Anemo angin). Hanya transform/opacity, mati otomatis kalau HP set "kurangi gerakan".
 - `data/farming.json` — tabel domain & karakter/senjata (hasil generate, jangan edit manual).
 - `data/resets.json` — jadwal reset (boleh diedit manual).
 - `tools/gen-farming.js` — script regenerasi `data/farming.json`.

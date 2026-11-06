@@ -90,6 +90,36 @@ async function handleGameRoles(cookie, headers) {
   return json(200, { retcode: 0, data: { roles } }, { 'Cache-Control': 'no-store' });
 }
 
+// Traveler's Diary. Endpoint-nya sering berubah host / format bulan, jadi dicoba beberapa kombinasi
+// berurutan: nomor bulan (1-12) di tiap host, lalu month=0 di host utama. Yang pertama retcode 0 dipakai.
+// Kalau semua gagal, pesan error tiap percobaan dikirim balik biar kelihatan di app.
+async function handleDiary(params, headers) {
+  const hosts = [
+    'https://sg-hk4e-api.hoyolab.com',
+    'https://hk4e-api-os.hoyolab.com',
+    'https://hk4e-api-os.hoyoverse.com',
+  ];
+  const month = /^\d{1,2}$/.test(params.month || '') ? params.month : '0';
+  const tries = hosts.map((h) => [h, month]);
+  if (month !== '0') tries.push([hosts[0], '0']);
+
+  const errors = [];
+  for (const [host, m] of tries) {
+    const q = new URLSearchParams({
+      month: m,
+      uid: params.role_id,
+      region: params.server,
+      bind_uid: params.role_id,
+      bind_region: params.server,
+      lang: 'en-us',
+    });
+    const j = await getJson(`${host}/event/ysledgeros/month_info?${q.toString()}`, headers);
+    if (j.retcode === 0 && j.data) return json(200, j, { 'Cache-Control': 'no-store' });
+    errors.push(`${new URL(host).hostname} bulan=${m}: ${j.message || 'retcode ' + j.retcode}`);
+  }
+  return json(200, { retcode: -1, message: 'HoyoLab menolak: ' + errors.join(' | ') }, { 'Cache-Control': 'no-store' });
+}
+
 export async function onRequest({ request }) {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
 
@@ -105,6 +135,7 @@ export async function onRequest({ request }) {
     let url, method = 'GET', body;
 
     if (action === 'gameRoles') return await handleGameRoles(cookie, headers);
+    if (action === 'diary') return await handleDiary(params, headers);
 
     switch (action) {
       case 'index': // profil ringkas (level AR, achievement, spiral abyss dsb)
@@ -141,18 +172,6 @@ export async function onRequest({ request }) {
       case 'spiralAbyss': { // detail Spiral Abyss: schedule_type 1 = periode ini, 2 = periode sebelumnya
         const st = params.schedule_type === '2' ? '2' : '1';
         url = `${BASE_RECORD}/spiralAbyss?role_id=${params.role_id}&server=${params.server}&schedule_type=${st}`;
-        break;
-      }
-      case 'diary': { // Traveler's Diary: primogem + mora per bulan (month=0 bulan ini, 1/2 = bulan lalu)
-        const q = new URLSearchParams({
-          month: params.month || '0',
-          uid: params.role_id,
-          region: params.server,
-          bind_uid: params.role_id,
-          bind_region: params.server,
-          lang: 'en-us',
-        });
-        url = `https://hk4e-api-os.hoyolab.com/event/ysledgeros/month_info?${q.toString()}`;
         break;
       }
       case 'redeemCode': { // redeem kode giveaway (primogem code dsb)

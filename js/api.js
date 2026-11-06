@@ -38,7 +38,51 @@ function getIndexCached() {
   return _indexCache.promise;
 }
 
-function resetIndexCache() { _indexCache = { at: 0, data: null, promise: null }; }
+function resetIndexCache() { _indexCache = { at: 0, data: null, promise: null }; resetDetailCache(); }
+
+// Cache detail karakter (senjata, artefak, stat). Dipakai tab Farming (material senjata) dan modal detail
+// karakter. Daftar karakter dari endpoint "index" TIDAK membawa data senjata, jadi senjata harus diambil dari
+// character/detail. Dikirim per 20 ID supaya request tetap kecil.
+const DETAIL_TTL_MS = 10 * 60 * 1000;
+let _detail = { at: 0, map: {}, props: {} };
+function resetDetailCache() { _detail = { at: 0, map: {}, props: {} }; }
+
+async function ensureDetails(ids) {
+  if (Date.now() - _detail.at > DETAIL_TTL_MS) resetDetailCache();
+  const need = [...new Set(ids)].filter((id) => !_detail.map[id]);
+  for (let i = 0; i < need.length; i += 20) {
+    const chunk = need.slice(i, i + 20);
+    const data = await callProxy('characterDetail', { character_ids: JSON.stringify(chunk) });
+    const list = data.list || data.avatars || [];
+    Object.assign(_detail.props, data.property_map || {});
+    list.forEach((c) => {
+      const id = (c.base || c).id;
+      if (id !== undefined) _detail.map[id] = c;
+    });
+    // satu ID diminta, satu data balik: pakai itu walau tipe ID-nya beda (string/angka)
+    if (chunk.length === 1 && list.length === 1 && !_detail.map[chunk[0]]) _detail.map[chunk[0]] = list[0];
+    _detail.at = Date.now();
+  }
+  return _detail;
+}
+
+// Senjata per karakter: {idKarakter: weapon}. Pakai data index kalau sudah ada, sisanya dari detail.
+async function getAvatarWeapons(avatars) {
+  const out = {};
+  const missing = [];
+  for (const a of avatars) {
+    if (a.weapon && a.weapon.id !== undefined) out[a.id] = a.weapon;
+    else missing.push(a.id);
+  }
+  if (missing.length) {
+    const d = await ensureDetails(missing);
+    for (const id of missing) {
+      const w = d.map[id] && d.map[id].weapon;
+      if (w && w.id !== undefined) out[id] = w;
+    }
+  }
+  return out;
+}
 
 const Api = {
   getIndex: () => callProxy('index'),
@@ -49,6 +93,8 @@ const Api = {
   getDailyNote: () => callProxy('dailynote'),
   getCharacters: () => callProxy('characters'),
   getCharacterDetail: (ids) => callProxy('characterDetail', { character_ids: JSON.stringify(ids) }),
+  getDetails: ensureDetails,
+  getWeapons: getAvatarWeapons,
   getSignInfo: () => callProxy('signInfo'),
   getSignHome: () => callProxy('signHome'),
   doSignIn: () => callProxy('signDo'),

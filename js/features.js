@@ -21,16 +21,16 @@ function gameDayOfWeek(nowMs = Date.now()) {
   return new Date(nowMs + serverOffsetMs() - 4 * 3600 * 1000).getUTCDay();
 }
 
+// Satuan terkecil = menit (dibulatkan ke atas, jadi tidak pernah tampil "0m" selagi belum habis)
 function fmtCountdown(ms) {
   if (ms <= 0) return 'sekarang';
-  const s = Math.floor(ms / 1000);
-  const d = Math.floor(s / 86400);
-  const h = Math.floor((s % 86400) / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
+  const total = Math.ceil(ms / 60000);
+  const d = Math.floor(total / 1440);
+  const h = Math.floor((total % 1440) / 60);
+  const m = total % 60;
   if (d > 0) return `${d} hari ${h}j ${m}m`;
-  if (h > 0) return `${h}j ${m}m ${String(sec).padStart(2, '0')}s`;
-  return `${m}m ${String(sec).padStart(2, '0')}s`;
+  if (h > 0) return `${h}j ${m}m`;
+  return `${m}m`;
 }
 
 // Jam lokal HP untuk target waktu (tambah "besok"/tanggal kalau bukan hari ini)
@@ -44,19 +44,22 @@ function fmtClock(ts) {
   return `${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} ${time}`;
 }
 
-// Satu ticker global: update semua elemen [data-end] tiap detik
+// Satu ticker global untuk semua elemen [data-end]. Cuma menit yang ditampilkan, jadi cukup tiap 10 detik
+// (hemat baterai), dan langsung disegarkan saat app dibuka lagi dari background.
 let _tickerStarted = false;
+function tickCountdowns() {
+  const now = Date.now();
+  document.querySelectorAll('[data-end]').forEach((el) => {
+    const left = Number(el.dataset.end) - now;
+    const txt = left <= 0 ? (el.dataset.done || 'sekarang') : fmtCountdown(left);
+    if (el.textContent !== txt) el.textContent = txt;
+  });
+}
 function startTicker() {
   if (_tickerStarted) return;
   _tickerStarted = true;
-  setInterval(() => {
-    const now = Date.now();
-    document.querySelectorAll('[data-end]').forEach((el) => {
-      const end = Number(el.dataset.end);
-      const left = end - now;
-      el.textContent = left <= 0 ? (el.dataset.done || 'sekarang') : fmtCountdown(left);
-    });
-  }, 1000);
+  setInterval(() => { if (!document.hidden) tickCountdowns(); }, 10000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) tickCountdowns(); });
 }
 function cd(endTs, doneText) {
   return `<span class="cd" data-end="${esc(endTs)}"${doneText ? ` data-done="${esc(doneText)}"` : ''}>${esc(fmtCountdown(endTs - Date.now()))}</span>`;
@@ -193,25 +196,35 @@ function fmtNum(n) {
   return Number.isFinite(v) ? v.toLocaleString('id-ID') : '-';
 }
 
-async function renderDiaryCard() {
+const diaryShell = (inner) => `<div class="card"><div class="card-title">Traveler's Diary</div>${inner}</div>`;
+
+async function loadDiaryCard(target) {
+  if (!target) return;
+  target.innerHTML = diaryShell('<div class="spinner">Memuat diary...</div>');
   try {
-    const data = await Api.getDiary(0);
+    // HoyoLab minta nomor bulan sungguhan (1-12) sesuai waktu server; proxy punya fallback ke month=0
+    const month = serverNowParts().getUTCMonth() + 1;
+    const data = await Api.getDiary(month);
     const md = data.month_data || {};
     const dd = data.day_data || {};
     const groups = (md.group_by || []).slice().sort((a, b) => (b.num || 0) - (a.num || 0)).slice(0, 5);
-    return `<div class="card">
-      <div class="card-title">Traveler's Diary · bulan ${esc(data.data_month ?? '')}</div>
+    const big = (n) => `<span data-count="${esc(Number(n) || 0)}">${esc(fmtNum(n))}</span>`;
+    target.innerHTML = `<div class="card">
+      <div class="card-title">Traveler's Diary · bulan ${esc(data.data_month ?? month)}</div>
       <div class="grid-2" style="margin-bottom:8px">
-        <div class="mini-stat"><div class="label">Primogem bulan ini</div><div class="val">${esc(fmtNum(md.current_primogems))}</div></div>
-        <div class="mini-stat"><div class="label">Mora bulan ini</div><div class="val">${esc(fmtNum(md.current_mora))}</div></div>
+        <div class="mini-stat"><div class="label">Primogem bulan ini</div><div class="val">${big(md.current_primogems)}</div></div>
+        <div class="mini-stat"><div class="label">Mora bulan ini</div><div class="val">${big(md.current_mora)}</div></div>
       </div>
       <div class="stat-row"><span>Primogem hari ini</span><span>${esc(fmtNum(dd.current_primogems))}</span></div>
       <div class="stat-row"><span>Primogem bulan lalu</span><span>${esc(fmtNum(md.last_primogems))}</span></div>
       ${groups.length ? `<div class="section-label">Sumber primogem terbesar</div>${groups.map((g) =>
         `<div class="stat-row"><span>${esc(g.action ?? '-')}</span><span>${esc(fmtNum(g.num))} (${esc(g.percent ?? 0)}%)</span></div>`).join('')}` : ''}
     </div>`;
+    animateCounts(target);
   } catch (e) {
-    return `<div class="card"><div class="card-title">Traveler's Diary</div><p class="muted">Tidak tersedia: ${esc(e.message)}</p></div>`;
+    target.innerHTML = diaryShell(`<p class="muted">Tidak tersedia: ${esc(e.message)}</p><button class="btn-secondary" id="diary-retry">Coba lagi</button>`);
+    const btn = target.querySelector('#diary-retry');
+    if (btn) btn.addEventListener('click', () => loadDiaryCard(target));
   }
 }
 
@@ -375,16 +388,6 @@ async function loadFarming() {
     }
     const bookKeys = Object.keys(byBook).filter((k) => farm.books[k] && isOpenToday(farm.books[k], day)).sort();
 
-    // Material senjata: senjata yang dipakai karakter, dikelompokkan per family
-    const byFam = {};
-    for (const a of avatars) {
-      const wid = a.weapon && a.weapon.id;
-      const fam = wid !== undefined ? farm.weapons[String(wid)] : undefined;
-      if (fam === undefined) continue;
-      (byFam[fam] = byFam[fam] || []).push(a);
-    }
-    const famKeys = Object.keys(byFam).filter((k) => isOpenToday(farm.wfam[k], day)).sort((x, y) => Number(x) - Number(y));
-
     const isSunday = day === 0;
     el.innerHTML = `
       <div class="card">
@@ -402,18 +405,52 @@ async function loadFarming() {
           </div>`).join('') : '<p class="muted">Tidak ada karakter kamu yang butuh book dari domain yang buka hari ini.</p>'}
       </div>
 
-      <div class="card">
-        <div class="card-title">Material Senjata</div>
-        ${famKeys.length ? famKeys.map((k) => `
-          <div class="farm-group">
-            <div class="row"><b>${esc(farm.wfam[k].n)}</b><span class="muted">${esc(farm.wfam[k].dom)}</span></div>
-            <div class="farm-chars">${byFam[k].map((a) => `
-              <div class="farm-char"><img src="${esc(a.weapon.icon ?? '')}" alt="" data-fallback><span>${esc(a.weapon.name ?? '-')}</span><span class="muted" style="font-size:10px">${esc(a.name)}</span></div>`).join('')}</div>
-          </div>`).join('') : '<p class="muted">Tidak ada senjata terpakai yang butuh material dari domain yang buka hari ini.</p>'}
-      </div>
+      <div class="card" id="weapon-card"><div class="card-title">Material Senjata</div><div class="spinner">Memuat senjata...</div></div>
       <p class="muted" style="font-size:12px">Sumber data: ${esc(farm.source)}. Karakter/senjata yang baru rilis bisa belum ada di tabel ini.</p>`;
     wireImgFallback(el);
+    fillWeaponCard(farm, avatars, day);
   } catch (e) {
     el.innerHTML = `<div class="card"><p class="error">Gagal memuat: ${esc(e.message)}</p></div>`;
+  }
+}
+
+// Senjata TIDAK ada di daftar karakter dari HoyoLab, jadi diambil lewat character/detail (lihat api.js),
+// lalu dicocokkan ke tabel family material. Dimuat terpisah supaya talent book tampil duluan.
+async function fillWeaponCard(farm, avatars, day) {
+  const box = document.getElementById('weapon-card');
+  if (!box) return;
+  const title = '<div class="card-title">Material Senjata</div>';
+  try {
+    const weapons = await Api.getWeapons(avatars);
+    if (!box.isConnected) return; // tab sudah dirender ulang
+
+    const byFam = {};
+    let unknown = 0;
+    for (const a of avatars) {
+      const w = weapons[a.id];
+      if (!w) continue;
+      const fam = farm.weapons[String(w.id)];
+      if (fam === undefined) { unknown++; continue; }
+      (byFam[fam] = byFam[fam] || []).push({ a, w });
+    }
+    const famKeys = Object.keys(byFam)
+      .filter((k) => farm.wfam[k] && isOpenToday(farm.wfam[k], day))
+      .sort((x, y) => Number(x) - Number(y));
+
+    box.innerHTML = title + (famKeys.length ? famKeys.map((k) => `
+      <div class="farm-group">
+        <div class="row"><b>${esc(farm.wfam[k].n)}</b><span class="muted">${esc(farm.wfam[k].dom)}</span></div>
+        <div class="farm-chars">${byFam[k].map(({ a, w }) => `
+          <div class="farm-char"><img src="${esc(w.icon ?? '')}" alt="" data-fallback><span>${esc(w.name ?? '-')}</span><span class="muted" style="font-size:10px">${esc(a.name)}</span></div>`).join('')}</div>
+      </div>`).join('') : '<p class="muted">Tidak ada senjata terpakai yang butuh material dari domain yang buka hari ini.</p>')
+      + (unknown ? `<p class="muted" style="font-size:12px;margin-top:8px">${esc(unknown)} senjata belum ada di tabel (kemungkinan baru rilis), jadi tidak ikut ditampilkan.</p>` : '');
+    wireImgFallback(box);
+  } catch (e) {
+    if (!box.isConnected) return;
+    box.innerHTML = `${title}<p class="error" style="margin-top:0">Gagal memuat data senjata: ${esc(e.message)}</p><button class="btn-secondary" id="weapon-retry">Coba lagi</button>`;
+    box.querySelector('#weapon-retry').addEventListener('click', () => {
+      box.innerHTML = `${title}<div class="spinner">Memuat senjata...</div>`;
+      fillWeaponCard(farm, avatars, day);
+    });
   }
 }

@@ -273,12 +273,27 @@ function renderAvatarRow(avatars) {
     `<img src="${esc(a.icon ?? a.image ?? '')}" alt="" title="Lv.${esc(a.level ?? '')}" data-fallback>`).join('')}</div>`;
 }
 
+// Rekor asli dari HoyoLab untuk periode Abyss ini. Catatan: HoyoLab TIDAK menyediakan damage per skill / per
+// burst, hanya "serangan terkuat" (damage 1 hit) dan jumlah pemakaian skill / burst.
+function renderAbyssRecords(data) {
+  const top = (list) => (Array.isArray(list) && list.length ? list[0] : null);
+  const rows = [
+    ['💥 Hit terkuat (1 serangan)', top(data.damage_rank), (v) => `${fmtNum(v)} damage`],
+    ['🌀 Skill paling sering dipakai', top(data.normal_skill_rank), (v) => `${fmtNum(v)}×`],
+    ['✨ Burst paling sering dipakai', top(data.energy_skill_rank), (v) => `${fmtNum(v)}×`],
+  ].filter(([, r]) => r);
+  if (!rows.length) return '';
+  return `<div class="section-label" style="margin-top:0">Rekor periode ini</div>${rows.map(([label, r, fmt]) =>
+    `<div class="stat-row rec-row"><span>${label}</span><span><img class="rec-ico" src="${esc(r.avatar_icon ?? '')}" alt="" data-fallback><b>${esc(fmt(r.value))}</b></span></div>`).join('')}
+    <div style="height:10px"></div>`;
+}
+
 function renderAbyss(data) {
   if (!data || !Array.isArray(data.floors) || !data.floors.length) {
     return '<p class="muted">Belum ada data Spiral Abyss untuk periode ini (atau belum dibuka).</p>';
   }
   const floors = data.floors.slice().sort((a, b) => (b.index || 0) - (a.index || 0));
-  return `
+  return `${renderAbyssRecords(data)}
     <div class="grid-2" style="margin-bottom:10px">
       <div class="mini-stat"><div class="label">Total bintang</div><div class="val">★ ${esc(data.total_star ?? 0)}</div></div>
       <div class="mini-stat"><div class="label">Lantai tertinggi</div><div class="val">${esc(data.max_floor ?? '-')}</div></div>
@@ -414,6 +429,18 @@ async function loadFarming() {
   }
 }
 
+// Ascension penuh: senjata bintang 3-5 maks Lv.90 (6 fase), bintang 1-2 maks Lv.70 (4 fase).
+// Pakai promote_level kalau ada (Lv.80 yang belum ascend ke-6 tetap dianggap belum max).
+function weaponCap(w) {
+  const low = Number(w.rarity) > 0 && Number(w.rarity) <= 2;
+  return { lv: low ? 70 : 90, promote: low ? 4 : 6 };
+}
+function weaponMaxed(w) {
+  const cap = weaponCap(w);
+  if (w.promote_level !== undefined && w.promote_level !== null && w.promote_level !== '') return Number(w.promote_level) >= cap.promote;
+  return Number(w.level) >= cap.lv;
+}
+
 // Senjata TIDAK ada di daftar karakter dari HoyoLab, jadi diambil lewat character/detail (lihat api.js),
 // lalu dicocokkan ke tabel family material. Dimuat terpisah supaya talent book tampil duluan.
 async function fillWeaponCard(farm, avatars, day) {
@@ -425,12 +452,14 @@ async function fillWeaponCard(farm, avatars, day) {
     if (!box.isConnected) return; // tab sudah dirender ulang
 
     const byFam = {};
-    let unknown = 0;
+    let unknown = 0, maxed = 0, needs = 0;
     for (const a of avatars) {
       const w = weapons[a.id];
       if (!w) continue;
       const fam = farm.weapons[String(w.id)];
       if (fam === undefined) { unknown++; continue; }
+      if (weaponMaxed(w)) { maxed++; continue; } // sudah ascension maksimal: tidak perlu material lagi
+      needs++;
       (byFam[fam] = byFam[fam] || []).push({ a, w });
     }
     const famKeys = Object.keys(byFam)
@@ -441,8 +470,9 @@ async function fillWeaponCard(farm, avatars, day) {
       <div class="farm-group">
         <div class="row"><b>${esc(farm.wfam[k].n)}</b><span class="muted">${esc(farm.wfam[k].dom)}</span></div>
         <div class="farm-chars">${byFam[k].map(({ a, w }) => `
-          <div class="farm-char"><img src="${esc(w.icon ?? '')}" alt="" data-fallback><span>${esc(w.name ?? '-')}</span><span class="muted" style="font-size:10px">${esc(a.name)}</span></div>`).join('')}</div>
-      </div>`).join('') : '<p class="muted">Tidak ada senjata terpakai yang butuh material dari domain yang buka hari ini.</p>')
+          <div class="farm-char"><img src="${esc(w.icon ?? '')}" alt="" data-fallback><span>${esc(w.name ?? '-')}</span><span class="muted" style="font-size:10px">${esc(a.name)} · Lv.${esc(w.level ?? '?')}/${weaponCap(w).lv}</span></div>`).join('')}</div>
+      </div>`).join('') : `<p class="muted">${needs ? 'Senjata yang belum max tidak ada yang butuh material dari domain yang buka hari ini.' : 'Semua senjata kamu sudah ascension maksimal 🎉 Nggak ada yang perlu di-farm.'}</p>`)
+      + (maxed ? `<p class="muted" style="font-size:12px;margin-top:8px">${esc(maxed)} senjata sudah max, tidak ditampilkan.</p>` : '')
       + (unknown ? `<p class="muted" style="font-size:12px;margin-top:8px">${esc(unknown)} senjata belum ada di tabel (kemungkinan baru rilis), jadi tidak ikut ditampilkan.</p>` : '');
     wireImgFallback(box);
   } catch (e) {

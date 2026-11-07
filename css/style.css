@@ -151,6 +151,7 @@ body {
   filter: blur(22px) brightness(.75);
 }
 .splash img { position: relative; max-width: 100%; max-height: 100%; object-fit: contain; width: 100%; height: auto; }
+@media (orientation: portrait) { .splash img { height: 100%; object-fit: cover; } }
 
 
 /* ---- Fitur tambahan: timer, reset, endgame, farming, CV ---- */
@@ -293,6 +294,9 @@ button:active:not(:disabled), .char-card:active, .equip-clickable:active { trans
 .fx-hydro::before, .fx-hydro::after { bottom: 0; left: 0; right: auto; width: 200%; height: 56px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 60' preserveAspectRatio='none'%3E%3Cpath d='M0 30 Q50 0 100 30 T200 30 T300 30 T400 30 V60 H0Z' fill='%234aa8ff' fill-opacity='.32'/%3E%3C/svg%3E") repeat-x / 50% 100%; animation: waveX 5s linear infinite; }
 .fx-hydro::before { height: 44px; opacity: .8; animation-duration: 8s; animation-direction: reverse; }
 .fx-hydro .p { bottom: -8%; width: var(--s); height: var(--s); border-radius: 50%; border: 1.5px solid rgba(150, 215, 255, .85); background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, .7), rgba(110, 190, 255, .12) 55%, rgba(90, 170, 255, .04)); animation: bubbleUp var(--t) ease-in var(--d) infinite; }
+/* Riak air: cincin elips melebar lalu hilang */
+.fx-hydro .p.rip { bottom: auto; top: var(--y); width: calc(var(--s) * 3); height: calc(var(--s) * 3); border: 2px solid rgba(165, 222, 255, .8); background: none; animation: rippleOut var(--t) ease-out var(--d) infinite; }
+@keyframes rippleOut { 0% { transform: scale(.15, .07); opacity: 0; } 12% { opacity: .9; } 100% { transform: scale(1.5, .65); opacity: 0; } }
 @keyframes waveX { to { transform: translateX(-50%); } }
 @keyframes bubbleUp { 0% { transform: translate(0, 0) scale(.6); opacity: 0; } 15% { opacity: .9; } 50% { transform: translate(var(--sw), -30vh) scale(1); } 100% { transform: translate(calc(var(--sw) * -1), -66vh) scale(1.1); opacity: 0; } }
 
@@ -332,6 +336,16 @@ button:active:not(:disabled), .char-card:active, .equip-clickable:active { trans
   100% { transform: translate(135vw, 0) rotate(var(--rot)) scale(.8); opacity: 0; }
 }
 
+/* Hembusan angin melengkung (bercampur dengan pusaran) */
+.fx-anemo .p.gust { left: -25%; top: var(--y); width: var(--s); height: 16px; -webkit-mask-image: linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent); mask-image: linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent); animation: gustFly var(--t) ease-in-out var(--d) infinite; }
+@keyframes gustFly {
+  0% { transform: translate(0, 0); opacity: 0; }
+  15% { opacity: 1; }
+  50% { transform: translate(70vw, var(--dy)); }
+  85% { opacity: .9; }
+  100% { transform: translate(150vw, calc(var(--dy) * -.5)); opacity: 0; }
+}
+
 /* ---- Detail karakter: gambar besar ala HoyoLab + tombol tutup ---- */
 .art-wrap { position: relative; margin: -20px -20px 0; background: radial-gradient(circle at 50% 62%, var(--el-soft, rgba(90, 163, 255, .2)), transparent 66%); animation: bob 4.5s ease-in-out infinite; }
 .art-wrap::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 42%; background: linear-gradient(to bottom, transparent, var(--card)); pointer-events: none; }
@@ -352,3 +366,7 @@ button:active:not(:disabled), .char-card:active, .equip-clickable:active { trans
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
   .fx-layer { display: none; }
 }
+
+/* Rekor Spiral Abyss */
+.rec-ico { width: 28px; height: 28px; border-radius: 8px; object-fit: cover; background: var(--card); vertical-align: middle; margin-right: 6px; }
+.rec-row span:last-child { display: flex; align-items: center; justify-content: flex-end; }

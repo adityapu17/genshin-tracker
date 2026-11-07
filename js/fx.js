@@ -69,10 +69,15 @@ const SWIRL_PATH = (() => {
   }
   return [d1, d2];
 })();
+// Hembusan angin: garis melengkung tipis yang memudar di kedua ujungnya (campuran dengan pusaran)
+const gustSvg = (style) => {
+  const y = () => rnd(1, 15).toFixed(1);
+  return `<svg class="p gust" viewBox="0 0 100 16" preserveAspectRatio="none" style="${style}" fill="none" stroke-linecap="round"><path d="M0 8C22 ${y()} 40 ${y()} 62 ${y()}S90 ${y()} 100 8" stroke="#d6fff4" stroke-width="2" stroke-opacity=".85" vector-effect="non-scaling-stroke"/><path d="M8 ${y()}C30 ${y()} 55 ${y()} 94 ${y()}" stroke="#8ff7de" stroke-width="1.2" stroke-opacity=".6" vector-effect="non-scaling-stroke"/></svg>`;
+};
 const swirlSvg = (style) => `<svg class="p swirl" viewBox="-50 -50 100 100" style="${style}" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="${SWIRL_PATH[0]}" stroke="#8ff7de" stroke-width="3.2" stroke-opacity=".85"/><path d="${SWIRL_PATH[1]}" stroke="#d6fff4" stroke-width="2" stroke-opacity=".7"/></svg>`;
 
 // Jumlah partikel per elemen: [normal, HP low-end]
-const FX_COUNT = { pyro: [22, 12], cryo: [14, 8], hydro: [14, 8], dendro: [16, 9], geo: [14, 8], electro: [9, 5], anemo: [6, 3] };
+const FX_COUNT = { pyro: [22, 12], cryo: [14, 8], hydro: [15, 9], dendro: [16, 9], geo: [14, 8], electro: [9, 5], anemo: [10, 6] };
 
 // Partikel pakai delay negatif supaya efek langsung "sedang berjalan" begitu modal terbuka.
 function elementFxHtml(key) {
@@ -85,18 +90,20 @@ function elementFxHtml(key) {
     switch (key) {
       case 'pyro':    s = rnd(2, 5.5);  t = rnd(2.4, 5);   break; // bara kecil
       case 'cryo':    s = rnd(5, 12);   t = rnd(5, 9);     break;
-      case 'hydro':   s = rnd(8, 22);   t = rnd(4, 8);     break;
+      case 'hydro':   s = rnd(8, 22);   t = rnd(4, 8);     break; // rip (riak) pakai s x3 sebagai diameter
       case 'dendro':  s = i % 2 ? rnd(3, 7) : rnd(12, 20); t = i % 2 ? rnd(5, 9) : rnd(6, 10); break;
       case 'geo':     s = rnd(8, 16);   t = rnd(4, 7);     break;
       case 'electro': s = rnd(3, 5);    t = rnd(1.6, 3);   break;
-      default:        s = rnd(60, 110); t = rnd(5, 9);     // anemo: pusaran
+      default:        // anemo: 1 dari 3 pusaran, sisanya hembusan melengkung (lebih cepat)
+        if (i % 3 === 0) { s = rnd(60, 110); t = rnd(5, 9); } else { s = rnd(80, 160); t = rnd(2.2, 4.2); }
     }
     const d = -rnd(0, t);
     const glyph = key === 'cryo' && i % 3 === 0 ? '❄' : '';
     // sp: dendro = titik cahaya hijau (separuh partikel), geo = percikan emas kecil
     const sp = (key === 'dendro' && i % 2) || (key === 'geo' && i % 4 === 3) ? ' sp' : '';
     const style = `--x:${x.toFixed(1)}%;--y:${rnd(4, 92).toFixed(0)}%;--s:${s.toFixed(1)}px;--t:${t.toFixed(2)}s;--d:${d.toFixed(2)}s;--sw:${sw.toFixed(0)}px;--rise:${rnd(30, 66).toFixed(0)}vh;--rot:${rnd(360, 720).toFixed(0)}deg;--dy:${rnd(-70, 70).toFixed(0)}px`;
-    out += key === 'anemo' ? swirlSvg(style) : `<i class="p${glyph ? ' g' : ''}${sp}" style="${style}">${glyph}</i>`;
+    const rip = key === 'hydro' && i % 3 === 2 ? ' rip' : ''; // riak air: cincin elips yang melebar
+    out += key === 'anemo' ? (i % 3 === 0 ? swirlSvg(style) : gustSvg(style)) : `<i class="p${glyph ? ' g' : ''}${sp}${rip}" style="${style}">${glyph}</i>`;
   }
   if (key === 'electro') out += '<svg class="arcs" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg>';
   return `<div class="fx-layer fx-${key}" aria-hidden="true">${out}</div>`;

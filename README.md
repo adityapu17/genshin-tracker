@@ -10,7 +10,8 @@ ke HP Android kayak app biasa.
 - ✅ Timer: realm currency, Parametric Transformer, tiap ekspedisi, weekly boss, hadiah misi harian
 - ✅ Countdown reset (harian, mingguan, Spiral Abyss, Imaginarium Theater, Stygian) dalam waktu server
 - ✅ Tab Endgame: ringkasan Abyss/Theater/Stygian + detail Spiral Abyss (periode ini/sebelumnya, bintang, tim)
-- ✅ Tab Farming: domain talent book & material senjata yang buka hari ini, dicocokkan ke karakter kamu
+- ✅ Tab Farming: domain talent book & material senjata yang buka hari ini, dicocokkan ke karakter kamu (material senjata hanya untuk senjata yang ascension-nya belum max)
+- ✅ Rekor Spiral Abyss: hit terkuat + skill/burst paling sering dipakai (HoyoLab tidak menyediakan damage per skill/burst)
 - ✅ Animasi interaksi + efek elemen per karakter (ringan, hormati pengaturan reduce-motion)
 - ✅ Traveler's Diary: primogem dan mora per bulan (tergantung API HoyoLab, bisa tidak tersedia)
 - ✅ Skor artefak (Crit Value = CRIT Rate × 2 + CRIT DMG) per artefak dan total di detail karakter

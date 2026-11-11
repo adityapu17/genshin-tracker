@@ -2,6 +2,9 @@ plugins {
     id 'com.android.application'
 }
 
+// Naik tiap build (dikirim workflow lewat -Pvc=nomor_run) supaya APK baru bisa menimpa yang lama
+def buildNumber = (project.findProperty('vc') ?: '1').toString().toInteger()
+
 android {
     namespace 'com.adityapu17.genshintracker'
     compileSdk 34
@@ -10,8 +13,7 @@ android {
         applicationId 'com.adityapu17.genshintracker'
         minSdk 24
         targetSdk 34
-        // versionCode naik tiap build (dikirim workflow lewat -Pvc=nomor_run) supaya APK baru bisa menimpa yang lama
-        versionCode (project.findProperty('vc') ?: '1').toInteger()
+        versionCode buildNumber
         versionName '1.0'
     }
 

@@ -148,11 +148,20 @@ async function loadHome() {
 // Kalau game belum terpasang, Chrome membuka halaman Play Store (browser_fallback_url).
 // iOS/desktop tidak punya cara resmi untuk membuka game dari web, jadi cuma kasih info.
 const GENSHIN_PKG = 'com.miHoYo.GenshinImpact';
+const PLAY_STORE_URL = `https://play.google.com/store/apps/details?id=${GENSHIN_PKG}`;
 function genshinLaunchUrl() {
-  const fallback = encodeURIComponent(`https://play.google.com/store/apps/details?id=${GENSHIN_PKG}`);
+  const fallback = encodeURIComponent(PLAY_STORE_URL);
   return `intent://#Intent;package=${GENSHIN_PKG};action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;S.browser_fallback_url=${fallback};end`;
 }
 function playGenshin() {
+  // Di APK Genshin Tracker (WebView) ada jembatan native yang bisa membuka game langsung.
+  if (window.AndroidApp && typeof window.AndroidApp.openGame === 'function') {
+    if (!window.AndroidApp.openGame()) {
+      toast('Genshin Impact belum terpasang. Membuka Play Store...');
+      setTimeout(() => { location.href = PLAY_STORE_URL; }, 900);
+    }
+    return;
+  }
   if (!/android/i.test(navigator.userAgent)) { toast('Tombol ini cuma bisa buka game di HP Android.'); return; }
   location.href = genshinLaunchUrl();
 }

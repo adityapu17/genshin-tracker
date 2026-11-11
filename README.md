@@ -89,3 +89,15 @@ cuma diteruskan langsung ke HoyoLab per-request oleh Pages Function.
 - **Splash screen** statis: ganti file `icons/splash.webp` kalau mau ganti gambar.
 - File icon di `icons/` masih placeholder sederhana — ganti dengan icon 192x192 &
   512x512 kamu sendiri kalau mau tampilan lebih rapi.
+
+
+## APK Android (opsional)
+
+Folder `android/` berisi cangkang WebView kecil yang membuka app ini (`https://hoyotrack.pages.dev/`) layar penuh.
+Keuntungannya: tombol **To Teyvat** bisa langsung membuka game Genshin Impact (web biasa tidak boleh, aturan Android).
+
+- Build otomatis oleh GitHub Actions (`.github/workflows/build-apk.yml`), hasilnya di **Releases → apk-latest → GenshinTracker.apk**.
+- Pasang di HP (izinkan "install dari sumber tidak dikenal"). Update berikutnya bisa langsung menimpa.
+- Perubahan di app web tidak perlu build ulang APK, karena isinya dimuat langsung dari Pages.
+- Ganti domain: edit `android/app/src/main/res/values/strings.xml` (`app_url`).
+- Catatan: data login (cookie) di APK terpisah dari versi PWA/Chrome, jadi isi ulang sekali. Notifikasi push web tidak jalan di WebView.

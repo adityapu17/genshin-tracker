@@ -1,0 +1,54 @@
+name: Build APK
+
+# Membuat APK Android (cangkang WebView untuk app web) dan memasangnya di Releases > "apk-latest".
+# Jalan otomatis saat folder android/ berubah, atau manual: tab Actions > Build APK > Run workflow.
+# App web sendiri dimuat langsung dari Cloudflare Pages, jadi perubahan web TIDAK perlu build ulang APK.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/build-apk.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Build debug APK
+        working-directory: android
+        run: gradle assembleDebug --no-daemon -Pvc=${{ github.run_number }}
+
+      - name: Simpan APK sebagai artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: genshin-tracker-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Publikasikan ke Releases (apk-latest)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk GenshinTracker.apk
+          gh release delete apk-latest --cleanup-tag --yes || true
+          gh release create apk-latest GenshinTracker.apk \
+            --target "${{ github.sha }}" \
+            --prerelease \
+            --title "Genshin Tracker APK (terbaru)" \
+            --notes "Build #${{ github.run_number }} dari commit ${{ github.sha }}. Unduh GenshinTracker.apk lalu pasang di HP Android."

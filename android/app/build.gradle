@@ -1,0 +1,39 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.adityapu17.genshintracker'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.adityapu17.genshintracker'
+        minSdk 24
+        targetSdk 34
+        // versionCode naik tiap build (dikirim workflow lewat -Pvc=nomor_run) supaya APK baru bisa menimpa yang lama
+        versionCode (project.findProperty('vc') ?: '1').toInteger()
+        versionName '1.0'
+    }
+
+    // Keystore tetap (ikut di repo) supaya tiap build punya tanda tangan yang sama dan bisa di-update tanpa uninstall.
+    // Ini app pribadi yang di-sideload, bukan untuk Play Store.
+    signingConfigs {
+        stable {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.stable
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

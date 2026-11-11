@@ -144,6 +144,19 @@ async function loadHome() {
   }
 }
 
+// Tombol "To Teyvat": buka game Genshin Impact (versi global) lewat Android intent.
+// Kalau game belum terpasang, Chrome membuka halaman Play Store (browser_fallback_url).
+// iOS/desktop tidak punya cara resmi untuk membuka game dari web, jadi cuma kasih info.
+const GENSHIN_PKG = 'com.miHoYo.GenshinImpact';
+function genshinLaunchUrl() {
+  const fallback = encodeURIComponent(`https://play.google.com/store/apps/details?id=${GENSHIN_PKG}`);
+  return `intent://#Intent;package=${GENSHIN_PKG};action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;S.browser_fallback_url=${fallback};end`;
+}
+function playGenshin() {
+  if (!/android/i.test(navigator.userAgent)) { toast('Tombol ini cuma bisa buka game di HP Android.'); return; }
+  location.href = genshinLaunchUrl();
+}
+
 function renderHome(el, note, index, signInfo, signHome) {
   const fetchedAt = Date.now();
   const resinPct = Math.min(100, Math.round((note.current_resin / note.max_resin) * 100));
@@ -161,6 +174,7 @@ function renderHome(el, note, index, signInfo, signHome) {
   }
 
   el.innerHTML = `
+    <button class="btn-play" id="btn-play">🌍 To Teyvat</button>
     <div class="card">
       <div class="row">
         <div class="card-title">Resin</div>
@@ -234,6 +248,7 @@ function renderHome(el, note, index, signInfo, signHome) {
 
   wireImgFallback(el);
   animateCounts(el);
+  document.getElementById('btn-play').addEventListener('click', playGenshin);
   document.getElementById('btn-checkin')?.addEventListener('click', doCheckin);
   document.getElementById('btn-redeem')?.addEventListener('click', doRedeem);
 

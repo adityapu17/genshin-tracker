@@ -370,3 +370,7 @@ button:active:not(:disabled), .char-card:active, .equip-clickable:active { trans
 /* Rekor Spiral Abyss */
 .rec-ico { width: 28px; height: 28px; border-radius: 8px; object-fit: cover; background: var(--card); vertical-align: middle; margin-right: 6px; }
 .rec-row span:last-child { display: flex; align-items: center; justify-content: flex-end; }
+
+/* Tombol "To Teyvat" */
+.btn-play { position: relative; overflow: hidden; width: 100%; padding: 15px; margin: 0 0 14px; border: none; border-radius: 14px; font-size: 18px; font-weight: 800; letter-spacing: .3px; color: #2a1c00; background: linear-gradient(135deg, #ffe08a, #f5b942 55%, #e89b2c); box-shadow: 0 4px 14px rgba(245, 185, 66, .28); }
+.btn-play::after { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, .5) 50%, transparent 70%); animation: sheen 3.2s ease-in-out infinite; }
